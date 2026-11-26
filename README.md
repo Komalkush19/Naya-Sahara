@@ -241,3 +241,11 @@ Developed by:
   <br/>
   Built as a hackathon project under the Women Leaders in Technology (WLiT) Fellowship 2026/27.
 </p>
+
+
+# Naya Sahara – frontend
+
+    npm install
+    npm run dev      # then open http://localhost:5173
+
+Click the round avatar (top right) in any dashboard to go back to the role page.
