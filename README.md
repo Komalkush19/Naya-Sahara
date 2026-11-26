@@ -11,7 +11,7 @@ After release, women retain control of their records and can use the platform to
 
 ---
 
-## 1. The Problem
+## The Problem
 
 Women receiving support during incarceration and after release often depend on multiple organizations for rehabilitation, legal assistance and essential services.
 
@@ -25,7 +25,7 @@ However, their information is scattered across different NGOs, paper records, sp
 
 Naya Sahara addresses these challenges by creating a shared digital infrastructure that connects existing support organizations while keeping women in control of their personal information.
 
-## 2. What Makes Naya Sahara Different?
+## What Makes Naya Sahara Different?
 
 - **Connected NGO ecosystem:** Brings existing NGOs and their paper-based workflows into one collaborative platform without replacing their existing operations.
 - **Secure case handover:** Enables caseworkers to transfer access through one-time claim codes, without requiring women to have an email address or phone number.
@@ -34,7 +34,7 @@ Naya Sahara addresses these challenges by creating a shared digital infrastructu
 - **Centralized opportunities:** Connects women with verified trainers, volunteers, organizations and employment opportunities.
 - **Privacy-first approach:** Uses minimal data collection, documented consent and strict separation between private case records and community profiles.
 
-## 3. User Roles and Responsibilities
+## User Roles and Responsibilities
 
 | User Role                    | Responsibilities                                                                             |
 | ---------------------------- | -------------------------------------------------------------------------------------------- |
@@ -45,7 +45,7 @@ Naya Sahara addresses these challenges by creating a shared digital infrastructu
 
 **Design principle:** Women are the beneficiaries and central participants of the platform. The application uses respectful terminology such as "woman" and "member", never "victim".
 
-## 4. Hackathon MVP
+## Hackathon MVP
 
 The hackathon MVP focuses on demonstrating an end-to-end user journey in approximately four minutes using synthetic data.
 
@@ -79,7 +79,7 @@ The hackathon MVP focuses on demonstrating an end-to-end user journey in approxi
 - Integration with prison management systems.
 - Real legal or personal data.
 
-## 5. Safety, Security and Privacy
+## Safety, Security and Privacy
 
 Naya Sahara is designed around the principle that women should retain control over their personal information.
 
@@ -122,7 +122,7 @@ A woman's private case record is stored separately from her community profile. T
 - Rate limiting.
 - Firebase Security Rules.
 
-## 6. Technology Stack
+## Technology Stack
 
 | Layer                           | Technology                          | Purpose                                                                      |
 | ------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
@@ -141,7 +141,7 @@ A woman's private case record is stored separately from her community profile. T
 | **Hosting**               | Firebase Hosting / Vercel           | Application deployment                                                       |
 | **Testing**               | Firebase Emulator Suite             | Authentication, database and security rule testing                           |
 
-## 7. Getting Started
+## Getting Started
 
 The application is currently being scaffolded task by task. Some setup instructions and configurations may evolve as implementation progresses.
 
@@ -199,7 +199,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - Never commit `.env` files, private API keys or Firebase service account credentials.
 - Use synthetic data for development and demonstration purposes.
 
-## 8. Project Roadmap
+## Project Roadmap
 
 | Phase                                          | Scope                                                                                                                                                                       |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -218,7 +218,7 @@ The following steps are essential before any pilot involving real users:
 - Security and privacy assessments.
 - Testing with appropriate consent and safeguarding procedures.
 
-## 11. Contributing
+## Contributing
 
 We welcome contributions, feedback and collaboration from developers, NGOs, legal professionals and individuals working in women's rehabilitation and social reintegration.
 
@@ -226,13 +226,13 @@ For major changes, please open an issue first to discuss the proposed contributi
 
 **Privacy reminder:** Never include real personal information in GitHub issues, screenshots, pull requests or demonstration environments.
 
-## 12. Team
+## Team
 
 Developed by:
 
 - **Aarya Dhungana**
 - **Komal Kushwaha**
-- **Samjhana Senchuri**
+- **Samjhana Senchu**
 
 ---
 
