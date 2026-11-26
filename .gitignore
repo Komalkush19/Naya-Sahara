@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Next.js build output
+.next/
+out/
+build/
+next-env.d.ts
+
+# Environment variables and secrets (never commit these)
+.env
+.env.*
+!.env.example
+functions/.env
+functions/.env.*
+.runtimeconfig.json
+*service-account*.json
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+
+# Firebase
+.firebase/
+firebase-debug.log*
+firebase-debug.*.log
+ui-debug.log
+firestore-debug.log
+database-debug.log
+pubsub-debug.log
+.emulator-data/
+emulator-data/
+functions/lib/
+functions/dist/
+
+# Logs and caches
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+*.tsbuildinfo
+coverage/
+
+# Vercel (if you deploy there)
+.vercel/
+
+# OS and editor junk
+.DS_Store
+__MACOSX/
+Thumbs.db
+.vscode/
+.idea/
+
+# Spec-First Coding
+Spec-First/
