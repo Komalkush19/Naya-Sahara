@@ -237,7 +237,6 @@ Developed by:
 ---
 
 <p align="center">
-  **Naya Sahara (नयाँ सहारा)**  
   <em>Continuity of care. Dignity beyond incarceration. A path toward a new beginning.</em>
   <br/>
   Built as a hackathon project under the Women Leaders in Technology (WLiT) Fellowship 2026/27.
