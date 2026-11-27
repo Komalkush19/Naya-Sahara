@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" role="img" aria-label="Empty notices illustration">
+  <rect width="240" height="180" rx="20" fill="#fff6f0"/>
+  <rect x="66" y="34" width="108" height="112" rx="14" fill="#ffffff" stroke="#e9e5ec" stroke-width="3"/>
+  <rect x="84" y="58" width="72" height="10" rx="5" fill="#e2d4e8"/>
+  <rect x="84" y="80" width="56" height="8" rx="4" fill="#f3d9c4"/>
+  <rect x="84" y="98" width="64" height="8" rx="4" fill="#ede9ef"/>
+</svg>

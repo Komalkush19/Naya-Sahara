@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420" role="img" aria-label="Community connection illustration placeholder">
+  <rect width="640" height="420" rx="24" fill="#f1eaf3"/>
+  <circle cx="230" cy="175" r="44" fill="#633d68" opacity="0.85"/>
+  <circle cx="320" cy="155" r="48" fill="#a45e40" opacity="0.85"/>
+  <circle cx="410" cy="175" r="44" fill="#2f795e" opacity="0.85"/>
+  <path d="M170 300c0-36 27-58 60-58s60 22 60 58M255 300c0-40 29-66 65-66s65 26 65 66M350 300c0-36 27-58 60-58s60 22 60 58" fill="#4e2f54" opacity="0.2"/>
+  <text x="320" y="370" text-anchor="middle" font-family="Plus Jakarta Sans, Inter, sans-serif" font-size="15" font-weight="600" fill="#4e2f54">Community Support Placeholder (community-support.jpg)</text>
+</svg>

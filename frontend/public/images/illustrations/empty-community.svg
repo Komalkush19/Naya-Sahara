@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" role="img" aria-label="Empty community illustration">
+  <rect width="240" height="180" rx="20" fill="#f8f3fa"/>
+  <circle cx="88" cy="78" r="22" fill="#e2d4e8"/>
+  <circle cx="152" cy="78" r="22" fill="#f3d9c4"/>
+  <path d="M58 134c0-18 14-30 30-30s30 12 30 30" fill="#cab4d3"/>
+  <path d="M122 134c0-18 14-30 30-30s30 12 30 30" fill="#e9bea0"/>
+</svg>

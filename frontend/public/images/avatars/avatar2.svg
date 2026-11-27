@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Rising sun illustrated avatar">
+  <circle cx="48" cy="48" r="48" fill="#fff0e7"/>
+  <circle cx="48" cy="42" r="18" fill="#a45e40"/>
+  <path d="M12 64 Q48 48 84 64 L84 96 L12 96 Z" fill="#633d68" opacity="0.85"/>
+</svg>

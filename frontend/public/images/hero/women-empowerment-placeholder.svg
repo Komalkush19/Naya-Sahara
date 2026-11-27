@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420" role="img" aria-label="Skills and training placeholder">
+  <rect width="640" height="420" rx="24" fill="#e7f3ed"/>
+  <circle cx="320" cy="175" r="76" fill="#fff8f5"/>
+  <path d="M320 232c-4-42 11-76 52-108 7 52-10 95-52 108Zm-4 0c-44-18-58-52-47-98 38 18 55 52 47 98Z" fill="#2f795e"/>
+  <text x="320" y="370" text-anchor="middle" font-family="Plus Jakarta Sans, Inter, sans-serif" font-size="15" font-weight="600" fill="#2f795e">Women Empowerment Placeholder (women-empowerment.jpg)</text>
+</svg>

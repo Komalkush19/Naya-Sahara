@@ -1,0 +1,48 @@
+{
+  "name": "naya-sahara",
+  "version": "1.0.0",
+  "description": "Privacy-first synthetic frontend demo for Naya Sahara, a service-tracking and support platform for women in Nepal.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Komalkush19/Naya-Sahara.git"
+  },
+  "keywords": [],
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Komalkush19/Naya-Sahara/issues"
+  },
+  "homepage": "https://github.com/Komalkush19/Naya-Sahara#readme",
+  "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/noto-sans-devanagari": "^5.2.6",
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.10",
+    "firebase": "^13.4.0",
+    "firebase-admin": "^14.5.1",
+    "material-symbols": "^0.49.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.11",
+    "@vitejs/plugin-react": "^6.3.0",
+    "autoprefixer": "^10.7.0",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.8",
+    "globals": "^17.14.0",
+    "postcss": "^8.5.33",
+    "tailwindcss": "^3.4.19",
+    "vercel": "^67.0.0",
+    "vite": "^8.4.0"
+  }
+}
