@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" role="img" aria-label="Supportive community illustration placeholder">
+  <defs>
+    <linearGradient id="bgHero" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8f1fa"/>
+      <stop offset="100%" stop-color="#fff0e7"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="520" rx="28" fill="url(#bgHero)"/>
+  <circle cx="630" cy="110" r="64" fill="#f3d9c4"/>
+  <path d="M0 390 Q210 300 430 370 T800 340 L800 520 L0 520 Z" fill="#e2d4e8"/>
+  <path d="M0 430 Q260 350 520 420 T800 395 L800 520 L0 520 Z" fill="#cab4d3" opacity="0.8"/>
+  <circle cx="330" cy="240" r="46" fill="#633d68" opacity="0.88"/>
+  <path d="M270 360c0-38 27-64 60-64s60 26 60 64" fill="#633d68" opacity="0.88"/>
+  <circle cx="450" cy="255" r="42" fill="#2f795e" opacity="0.85"/>
+  <path d="M395 365c0-35 25-58 55-58s55 23 55 58" fill="#2f795e" opacity="0.85"/>
+  <text x="400" y="478" text-anchor="middle" font-family="Plus Jakarta Sans, Inter, sans-serif" font-size="16" font-weight="600" fill="#4e2f54">Hero Image Placeholder (hero-support.jpg)</text>
+</svg>

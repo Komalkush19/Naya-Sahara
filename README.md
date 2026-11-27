@@ -1,235 +1,114 @@
-
 # Naya Sahara (नयाँ सहारा)
 
-### A shared digital backbone for NGOs supporting women through and after prison in Nepal.
+### A privacy-first digital platform connecting NGOs, support opportunities, and women transitioning through and after incarceration in Nepal.
 
-Naya Sahara is a collaborative digital platform that connects NGOs, caseworkers and lawyers supporting women during incarceration and after release. It provides a consent-based, offline-capable case management system that helps organizations maintain continuity of care, ensuring that essential information about health needs, court dates, children and rehabilitation plans is not lost during organizational handovers.
+> **Current implementation status:** The UI under `frontend/` is currently running with local synthetic demo data in React state while Firebase Auth, Firestore rules, and Vercel API endpoints are being integrated. `backend/firestore.rules` currently defaults to deny-all until reviewed and deployed. Do not enter real personal, legal, or medical data.
 
-After release, women retain control of their records and can use the platform to connect with other women, discover verified training programs, access support services and find employment opportunities, creating a pathway toward independent community life.
+Naya Sahara helps bridge fragmented rehabilitation, training, legal-aid, and employment support in Nepal. It enables verified NGOs to publish public support notices and connect with women, while allowing women to use pseudonymous nickname-and-avatar identities, read translated and simplified government and NGO notices, and communicate safely without exposing their real names, email addresses, or phone numbers.
 
-> **Disclaimer:** Naya Sahara is a service-tracking platform, not a legal or court-records management system. Legal information in the project documentation consists of unverified summaries and must be reviewed by a qualified lawyer before any real-world pilot. The platform provides general guidance, not legal advice.
+> **Disclaimer:** Naya Sahara is an information, opportunity-discovery, and safe-communication platform—not a legal or court-records system. It provides general support information, not legal advice.
 
 ---
 
-## The Problem
+## Core Architecture (Confirmed Stack)
 
-Women receiving support during incarceration and after release often depend on multiple organizations for rehabilitation, legal assistance and essential services.
+| Layer | Technology | Notes |
+|---|---|---|
+| **Frontend** | React 19, Vite, JavaScript/JSX | Single-page application in `frontend/` |
+| **Styling & Typography** | CSS, Tailwind CSS config, Inter, Noto Sans Devanagari, Plus Jakarta Sans, Material Symbols | Nepali (`ne`) default with English (`en`) toggle |
+| **Backend API** | Vercel Serverless Functions (`frontend/api/`) | Node.js routes using `firebase-admin` and `bcryptjs` |
+| **Database & Auth** | Firebase Spark (free tier): Cloud Firestore + Firebase Authentication | Custom-token auth for women; Firebase Auth with server-verified roles for staff |
+| **Static Visual Assets** | Local files in `frontend/public/images/` | No Firebase Storage, no Cloudinary, no external stock image URLs |
+| **Read-Aloud** | Browser Web Speech API (`window.speechSynthesis`) | On-device playback with device-capability fallback |
+| **Linting** | ESLint | `npm run lint` inside `frontend/` |
 
-However, their information is scattered across different NGOs, paper records, spreadsheets and individual caseworkers. This creates several challenges:
+**Explicitly excluded from this stack:** Next.js, TypeScript, Firebase Blaze plan, Firebase Cloud Functions, Firebase Storage, Cloudinary, PostgreSQL, and Supabase.
 
-- **Fragmented records:** Important information gets lost when women move between organizations.
-- **Missed follow-ups:** Hearing reminders, health needs and support requirements can go unnoticed.
-- **Disrupted rehabilitation:** Staff changes and organizational handovers interrupt continuity of care.
-- **Limited post-release support:** Women often lose contact with the organizations that supported them during incarceration.
-- **Disconnected opportunities:** Information about training, employment and available assistance is difficult to access.
+---
 
-Naya Sahara addresses these challenges by creating a shared digital infrastructure that connects existing support organizations while keeping women in control of their personal information.
+## The Four Application Interfaces
 
-## What Makes Naya Sahara Different?
+| Interface | Access & Auth | Core Responsibilities |
+|---|---|---|
+| **1. Public / Guest** | No account required | Landing page, browse verified NGO profiles & contact details, browse published NGO & Government notices with location/category filters. No access to member profiles, chats, or private dashboards. |
+| **2. Platform Admin** | Firebase Auth + server-verified `platform_admin` claim | Platform overview metrics; verify, reject, edit, or archive NGOs; view basic non-sensitive member metadata (nickname, avatar, registration date, verifying NGO, status); create, edit, publish, unpublish, archive, and restore Government & NGO notices; review/approve/reject optional AI translations and summaries before publication. |
+| **3. NGO Dashboard** | Firebase Auth + server-verified `ngo_admin` claim | Manage own NGO public profile (logo, description, work area, contact info, location); manage caseworker directory (profiles only, no individual logins); view associated women by pseudonymous nickname/avatar/joining date/verification status; issue one-time 72-hour handover codes; create, edit, publish, and archive own NGO notices. |
+| **4. Woman / Member Dashboard** | Handover code + unique nickname + password + illustrated avatar (`signInWithCustomToken`) | Personal pseudonymous profile; **Your Community** (opt-in pseudonymous member directory with district/municipality and optional skills/interests); **Find NGOs**; **Chats** (text-only 1:1 Woman ↔ NGO and Woman ↔ Woman after request acceptance); **Notices** (two tabs: **NGO Notices** and **Government Notices** with filters, translation view, and read-aloud); Quick Exit & discreet `"My Support"` mode. |
 
-- **Connected NGO ecosystem:** Brings existing NGOs and their paper-based workflows into one collaborative platform without replacing their existing operations.
-- **Secure case handover:** Enables caseworkers to transfer access through one-time claim codes, without requiring women to have an email address or phone number.
-- **Continuity of care:** Connects support during incarceration with rehabilitation and community reintegration after release.
-- **Accessible government information:** Provides translated, filtered and audio-supported government notices.
-- **Centralized opportunities:** Connects women with verified trainers, volunteers, organizations and employment opportunities.
-- **Privacy-first approach:** Uses minimal data collection, documented consent and strict separation between private case records and community profiles.
+---
 
-## User Roles and Responsibilities
+## MVP Scope Highlights & Privacy Boundaries
 
-| User Role                    | Responsibilities                                                                             |
-| ---------------------------- | -------------------------------------------------------------------------------------------- |
-| **Organization Admin** | Manages the NGO profile, staff accounts and organizational opportunities.                    |
-| **Platform Admin**     | Verifies organizations, approves government notices and manages platform moderation.         |
-| **Member (Woman)**     | Accesses her transferred record, opportunities, notices, messaging and community features.   |
-| **Guest**              | Accesses limited public information, including opportunities, notices and the NGO directory. |
+- **No email or phone required for women:** Women register via an NGO-issued one-time 72-hour handover code, choose a unique nickname, password, and illustrated avatar, and sign in via backend custom-token verification.
+- **No sensitive case/medical/legal records:** The MVP does not store incarceration histories, court files, offence details, medical diagnoses, children's names, or guardian details.
+- **Merged Notices (no separate Opportunities page):** Jobs, training, financial aid, workshops, education, and rehabilitation programs are categories inside **NGO Notices**.
+- **Opt-in Community Directory (no public wall/groups):** **Your Community** displays only opted-in pseudonymous profiles and lets women send 1:1 message requests.
+- **Request-gated text-only chat:** Recipients must accept a message request before a conversation opens; authorization relies on Firebase Auth participant UIDs.
+- **Human-gated public-content AI:** AI translation/simplification/extraction runs only on public notice text and requires Platform Admin approval before publication. Never send private member data or chat messages to AI.
+- **Minimal connectivity support:** Displays a simple online/offline indicator, clear connectivity error feedback with retry, and optional caching of public notices only. No offline case-sync engine or persistent caching of sensitive member data.
 
-**Design principle:** Women are the beneficiaries and central participants of the platform. The application uses respectful terminology such as "woman" and "member", never "victim".
+---
 
-## Hackathon MVP
+## Repository Structure
 
-The hackathon MVP focuses on demonstrating an end-to-end user journey in approximately four minutes using synthetic data.
+```text
+frontend/
+  api/                    # Vercel serverless API routes (firebase-admin)
+  public/
+    favicon.svg
+    images/               # Local visual assets & SVG placeholders (see IMAGE_ASSETS.md)
+  src/
+    components/           # AppShell, reusable UI primitives & AssetImage fallback
+    config/               # Centralized image asset manifest (images.js)
+    firebase/             # Firebase modular web SDK initialization
+    pages/                # Role and feature views
+    services/             # Firestore / API service layer
+    App.jsx
+    data.js               # Synthetic demo seed data
+    i18n.js               # Nepali / English helper
+    styles.css
+  package.json
+backend/
+  firebase.json
+  firestore.rules         # Default-deny until reviewed & deployed
+  firestore.indexes.json
+Spec-First/               # Product specifications & architecture plans (see spec.md)
+IMAGE_ASSETS.md           # Complete local image asset manifest & alt-text spec
+```
 
-### Core Demonstration Workflow
-
-1. **NGO Registration and Verification:** An organization registers on the platform and receives approval from the platform administrator.
-2. **Case Management:** A caseworker creates a case record and adds relevant information, including:
-
-   - Next hearing date and legal status.
-   - Basic health and hygiene needs.
-   - Children and guardian information.
-   - Release checklist and support requirements.
-3. **Secure Case Handover:** The caseworker generates a one-time claim code. The woman uses this code to claim her record, creates a nickname and PIN, and accesses her personal dashboard.
-4. **Opportunities Board:** NGOs publish opportunities. Women can filter available opportunities, translate content between Nepali and English, and listen to information through text-to-speech.
-5. **Government Notices:** An administrator adds a government notice. AI translates the notice and extracts relevant information such as location, eligibility and deadlines. The administrator reviews and approves the notice before publication.
-6. **NGO Directory and Messaging:** Women can explore verified NGO profiles and initiate conversations through the messaging system.
-7. **Offline Functionality:** The application demonstrates offline access by allowing an update to a synthetic case record. The update displays a pending-sync status and synchronizes when connectivity is restored, without duplicate application.
-
-### Should-Have Features
-
-- Anonymous community groups.
-- Message requests before initiating conversations.
-- User reporting and blocking mechanisms.
-
-### Out of Scope for the Hackathon MVP
-
-- Trainer marketplace.
-- Impact analytics and reporting dashboards.
-- Automated web scraping.
-- Advanced moderation tools.
-- Integration with prison management systems.
-- Real legal or personal data.
-
-## Safety, Security and Privacy
-
-Naya Sahara is designed around the principle that women should retain control over their personal information.
-
-### Consent-First Data Management
-
-- Documented consent is required before personal information is stored or shared.
-- Women can revoke their consent.
-- Access to records is restricted according to organizational roles and permissions.
-
-### Minimal Data Collection
-
-The platform stores only information necessary for service coordination, including:
-
-- Staff-entered hearing reminders.
-- Basic legal status.
-- Expected release month.
-- General health and hygiene needs.
-
-The platform does not collect court files, offence details or medical diagnoses.
-
-### Safe Community Experience
-
-- Nickname-only community profiles.
-- No profile photographs.
-- Message requests before direct conversations.
-- Block and report functionality.
-- Quick-exit functionality.
-- Discreet application name and icon.
-
-### Separation of Private and Public Information
-
-A woman's private case record is stored separately from her community profile. There is no direct link that allows other community members to identify her case record through her nickname.
-
-### Technical Security Measures
-
-- Hashed claim codes and PINs.
-- Role-based access control.
-- Organization-level data permissions.
-- Audit logs.
-- Rate limiting.
-- Firebase Security Rules.
-
-## Technology Stack
-
-| Layer                           | Technology                          | Purpose                                                                      |
-| ------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
-| **Frontend**              | Next.js, React                      | Application interface and routing                                            |
-| **Styling**               | Tailwind CSS, shadcn/ui             | Responsive and accessible UI components                                      |
-| **Database**              | Firebase Firestore                  | Case records and application data with offline persistence                   |
-| **Authentication**        | Firebase Authentication             | Staff authentication                                                         |
-| **Member Authentication** | Firebase Cloud Functions            | Claim-code verification and custom token issuance for nickname and PIN login |
-| **Access Control**        | Firestore Security Rules            | Role-based and organization-level permissions                                |
-| **File Storage**          | Firebase Storage                    | Consent document storage                                                     |
-| **Internationalization**  | next-intl                           | Nepali and English language support                                          |
-| **Typography**            | Noto Sans Devanagari                | Nepali language rendering                                                    |
-| **Voice Accessibility**   | Web Speech API, cached Nepali audio | Audio support for notices and opportunities                                  |
-| **AI Integration**        | LLM API with JSON-schema output     | Translation and structured information extraction from public notices        |
-| **Backend**               | Firebase Cloud Functions            | Secure server-side operations and AI processing                              |
-| **Hosting**               | Firebase Hosting / Vercel           | Application deployment                                                       |
-| **Testing**               | Firebase Emulator Suite             | Authentication, database and security rule testing                           |
+---
 
 ## Getting Started
 
-The application is currently being scaffolded task by task. Some setup instructions and configurations may evolve as implementation progresses.
+**Prerequisites:** Node.js 20.19+ and npm.
 
-### Prerequisites
-
-- Node.js 20 or later.
-- npm.
-- Firebase CLI.
-- A Firebase project for deployment and configuration.
-
-### Installation
-
-**1. Clone the repository**
+From `frontend/`:
 
 ```bash
-git clone https://github.com/aarya25dh/Naya-Sahara-Rehabilitation-Platform.git
-
-cd Naya-Sahara-Rehabilitation-Platform
-```
-
-**2. Install dependencies**
-
-```bash
+cd frontend
 npm install
-```
-
-**3. Configure environment variables**
-
-```bash
-cp .env.example .env.local
-```
-
-Add the required Firebase web configuration to `.env.local`.
-
-**4. Start Firebase Emulators**
-
-```bash
-firebase emulators:start
-```
-
-Enable the required emulators for Authentication, Firestore and Cloud Functions.
-
-**5. Start the development server**
-
-```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+- Local Vite dev server: `http://localhost:5173`
+- Local Vercel dev server (for API routes in `frontend/api/`): `npx vercel dev` (`http://localhost:3000`)
+- Lint & production build:
+  ```bash
+  npm run lint
+  npm run build
+  ```
 
-### Deployment Notes
+### Security Reminders
 
-- Cloud Functions deployment requires the Firebase Blaze (pay-as-you-go) plan.
-- Configure budget alerts before deploying paid services.
-- Never commit `.env` files, private API keys or Firebase service account credentials.
-- Use synthetic data for development and demonstration purposes.
+- Never commit `.env`, `.env.local`, or `*-firebase-adminsdk-*.json` credentials.
+- Never import `firebase-admin` or `bcryptjs` into browser-facing files under `frontend/src/`.
+- Always use synthetic demo data during hackathon development and testing.
 
-## Project Roadmap
-
-| Phase                                          | Scope                                                                                                                                                                       |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Hackathon MVP**                        | End-to-end demonstration with synthetic data, NGO registration, case management, secure handover, opportunities, government notices, messaging and offline synchronization. |
-| **Phase 1: NGO Pilot**                   | Caseworker accounts, consent management, service logs, release checklists, handover codes, printable case summaries and offline functionality.                              |
-| **Phase 2: Community and Opportunities** | Opportunities board, government notices with AI translation and filtering, and the member's personal space.                                                                 |
-| **Phase 3: Extended Ecosystem**          | Opt-in community, trainer board, learning resources and impact dashboard.                                                                                                   |
-
-### Before Real-World Deployment
-
-The following steps are essential before any pilot involving real users:
-
-- Legal review of all legal information and workflows.
-- Data-handling agreements with participating NGOs.
-- Interviews and feedback sessions with NGO staff.
-- Security and privacy assessments.
-- Testing with appropriate consent and safeguarding procedures.
-
-## Contributing
-
-We welcome contributions, feedback and collaboration from developers, NGOs, legal professionals and individuals working in women's rehabilitation and social reintegration.
-
-For major changes, please open an issue first to discuss the proposed contribution.
-
-**Privacy reminder:** Never include real personal information in GitHub issues, screenshots, pull requests or demonstration environments.
+---
 
 ## Team
 
 Developed by:
-
 - **Aarya Dhungana**
 - **Komal Kushwaha**
 - **Samjhana Senchu**
@@ -237,15 +116,7 @@ Developed by:
 ---
 
 <p align="center">
-  <em>Continuity of care. Dignity beyond incarceration. A path toward a new beginning.</em>
+  <em>Continuity of support. Dignity beyond incarceration. A path toward a new beginning.</em>
   <br/>
-  Built as a hackathon project under the Women Leaders in Technology (WLiT) Fellowship 2026/27.
+  Built under the Women Leaders in Technology (WLiT) Fellowship 2026/27.
 </p>
-
-
-# Naya Sahara – frontend
-
-    npm install
-    npm run dev      # then open http://localhost:5173
-
-Click the round avatar (top right) in any dashboard to go back to the role page.
