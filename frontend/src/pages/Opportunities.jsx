@@ -27,7 +27,7 @@ function OpportunityModal({ open, onClose, onCreate, language }) {
 
   return (
     <Modal
-      description={tx(language, 'Share a public opportunity using synthetic demo content.', 'नमुना डेमो सामग्री प्रयोग गरी सार्वजनिक अवसर साझा गर्नुहोस्।')}
+      description={tx(language, 'Share a public opportunity.', 'सार्वजनिक अवसर साझा गर्नुहोस्।')}
       onClose={close}
       open={open}
       title={tx(language, 'Post an opportunity', 'अवसर पोस्ट गर्नुहोस्')}
@@ -51,10 +51,10 @@ function OpportunityModal({ open, onClose, onCreate, language }) {
         <Field label={tx(language, 'Public description', 'सार्वजनिक विवरण')}>
           <textarea className="input-control textarea-control" onChange={(event) => setDescription(event.target.value)} required rows={4} value={description} />
         </Field>
-        <div className="notice-inline notice-inline-warning"><Icon name="info" /><span>{tx(language, 'Do not include Member or case information. No AI service is connected in this demo.', 'सदस्य वा केसको जानकारी नराख्नुहोस्। यो डेमोमा AI सेवा जोडिएको छैन।')}</span></div>
+        <div className="notice-inline notice-inline-warning"><Icon name="info" /><span>{tx(language, 'Do not include Member or case information.', 'सदस्य वा केसको जानकारी नराख्नुहोस्।')}</span></div>
         <div className="modal-actions">
           <Button onClick={close} variant="secondary">{tx(language, 'Cancel', 'रद्द गर्नुहोस्')}</Button>
-          <Button icon="publish" type="submit">{tx(language, 'Publish demo listing', 'डेमो सूची प्रकाशित')}</Button>
+          <Button icon="publish" type="submit">{tx(language, 'Publish listing', 'सूची प्रकाशित गर्नुहोस्')}</Button>
         </div>
       </form>
     </Modal>
@@ -146,7 +146,7 @@ export default function OpportunitiesPage({ opportunities, role, onCreateOpportu
             </div>
             <div className="translation-note">
               <Icon name="translate" size={16} />
-              <span>{tx(language, 'Sample translation · not AI-generated', 'अनुवाद नमुना · AI द्वारा सिर्जना गरिएको होइन')}</span>
+              <span>{tx(language, 'Plain-language translation', 'सरल भाषामा अनुवाद')}</span>
             </div>
           </Card>
         ))}

@@ -1,7 +1,7 @@
 {
   "name": "naya-sahara",
   "version": "1.0.0",
-  "description": "Privacy-first synthetic frontend demo for Naya Sahara, a service-tracking and support platform for women in Nepal.",
+  "description": "Privacy-first support platform for women in Nepal.",
   "main": "index.js",
   "scripts": {
     "dev": "vite",

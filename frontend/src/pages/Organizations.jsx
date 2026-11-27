@@ -29,8 +29,8 @@ function EditOrganizationModal({ open, onClose, organization, onUpdate, language
     <Modal
       description={tx(
         language,
-        'Update your public organization profile. Changes are visible across the platform in this demonstration.',
-        'तपाईंको संस्थाको सार्वजनिक विवरण अपडेट गर्नुहोस्। परिवर्तनहरू डेमोभर देखिनेछन्।',
+        'Update your public organization profile.',
+        'तपाईंको संस्थाको सार्वजनिक विवरण अपडेट गर्नुहोस्।',
       )}
       onClose={onClose}
       open={open}
@@ -94,11 +94,6 @@ function EditOrganizationModal({ open, onClose, organization, onUpdate, language
           </Field>
         </div>
 
-        <div className="notice-inline notice-inline-info">
-          <Icon name="verified_user" />
-          <span>{tx(language, 'Demonstration mode: edits update local state without modifying server database.', 'डेमो मोड: सम्पादनले सर्भर डाटाबेस परिवर्तन नगरी स्थानीय रूपमा अपडेट गर्छ।')}</span>
-        </div>
-
         <div className="modal-actions">
           <Button onClick={onClose} variant="secondary">{tx(language, 'Cancel', 'रद्द गर्नुहोस्')}</Button>
           <Button icon="save" type="submit">{tx(language, 'Save changes', 'परिवर्तन सुरक्षित')}</Button>
@@ -128,7 +123,7 @@ function RegisterOrganizationModal({ open, onClose, onRegister, language }) {
 
   return (
     <Modal
-      description={tx(language, 'Only public organization details are collected in this demo.', 'यो डेमोमा संस्थाको सार्वजनिक विवरण मात्र राखिन्छ।')}
+      description={tx(language, 'Provide your organization’s public contact and service details.', 'आफ्नो संस्थाको सार्वजनिक सम्पर्क र सेवा विवरण दिनुहोस्।')}
       onClose={close}
       open={open}
       title={tx(language, 'Register an organization', 'संस्था दर्ता गर्नुहोस्')}
@@ -159,8 +154,8 @@ function OrganizationDetailModal({ open, onClose, organization, onNavigate, onRe
     <Modal
       description={tx(
         language,
-        'Verified demonstration partner organization profile on Naya Sahara.',
-        'नयाँ सहारामा प्रमाणित नमुना साझेदार संस्थाको विवरण।',
+        'Organization profile on Naya Sahara.',
+        'नयाँ सहारामा संस्थाको प्रोफाइल।',
       )}
       onClose={onClose}
       open={open}
@@ -216,11 +211,6 @@ function OrganizationDetailModal({ open, onClose, organization, onNavigate, onRe
             <Icon name="location_on" size={15} />
             <strong>{tx(language, 'District', 'जिल्ला')}:</strong> {organization.location}
           </span>
-        </div>
-
-        <div className="notice-inline notice-inline-info">
-          <Icon name="verified_user" />
-          <span>{tx(language, 'Demonstration organization: all details are modeled for the hackathon prototype.', 'नमुना संस्था: सबै विवरणहरू ह्याकाथन प्रदर्शनका लागि तयार गरिएका हुन्।')}</span>
         </div>
 
         <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
@@ -392,7 +382,7 @@ export default function OrganizationsPage({
 
           <div className="featured-org-footer">
             <Icon name="shield_lock" size={16} />
-            <span>{tx(language, 'Only Platform Admins can modify verification status. Changes here update your demonstration profile.', 'प्लेटफर्म प्रशासकले मात्र स्वीकृति अवस्था परिवर्तन गर्न सक्छन्। यहाँ गरिएका सम्पादनले डेमो प्रोफाइल अपडेट गर्छ।')}</span>
+            <span>{tx(language, 'Only Platform Admins can modify verification status.', 'प्लेटफर्म प्रशासकले मात्र स्वीकृति अवस्था परिवर्तन गर्न सक्छन्।')}</span>
           </div>
         </Card>
       )}

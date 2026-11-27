@@ -67,7 +67,7 @@ export default function CasesPage({
         }
       />
 
-      {/* Handover Code Generator & Demonstration Management */}
+      {/* Handover code management */}
       <div className="handover-generation-panel">
         <Card className="handover-card">
           <div className="handover-card-header">
@@ -171,8 +171,8 @@ export default function CasesPage({
             <span>
               {tx(
                 language,
-                'Demonstration notice: Codes shown here update local React state and are not cryptographic server credentials. In production, codes are salted and hashed server-side.',
-                'नमुना प्रदर्शन सूचना: यहाँ देखाइएका कोडहरू स्थानीय रूपमा व्यवस्थित छन्। वास्तविक प्रणालीमा कोडहरू सर्भरमा सुरक्षित रूपमा ह्यास गरिन्छ।',
+                'Treat handover codes as confidential and share them only with the intended member.',
+                'हस्तान्तरण कोड गोप्य राख्नुहोस् र तोकिएको सदस्यसँग मात्र साझा गर्नुहोस्।',
               )}
             </span>
           </div>

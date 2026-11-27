@@ -44,7 +44,7 @@ function ReportModal({ open, onClose, onConfirm, targetName, language }) {
         />
         <div className="notice-inline notice-inline-info">
           <Icon name="shield" />
-          <span>{tx(language, 'Report recorded in this demo for safety review without accessing other private chats.', 'यो डेमोमा अन्य निजी च्याटमा पहुँच नराखी सुरक्षा समीक्षाका लागि रिपोर्ट रेकर्ड गरिन्छ।')}</span>
+          <span>{tx(language, 'Your report will be reviewed without accessing other private chats.', 'अन्य निजी च्याटमा पहुँच नगरी तपाईंको रिपोर्टको समीक्षा गरिनेछ।')}</span>
         </div>
         <div className="modal-actions">
           <Button onClick={onClose} variant="secondary">
@@ -429,7 +429,7 @@ export default function MessagesPage({
               {currentConv.reported && (
                 <div className="report-confirmation" style={{ margin: '8px 14px' }}>
                   <Icon name="flag" size={17} />
-                  {tx(language, 'Report submitted for safety review in this demo.', 'यो डेमोमा सुरक्षा समीक्षाका लागि रिपोर्ट पेस गरियो।')}
+                  {tx(language, 'Report submitted for safety review.', 'सुरक्षा समीक्षाका लागि रिपोर्ट पेस गरियो।')}
                 </div>
               )}
 

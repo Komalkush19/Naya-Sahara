@@ -98,8 +98,8 @@ export default function AuthPage({
         result?.error ||
           tx(
             language,
-            'Could not sign in with those demo credentials.',
-            'यी नमुना विवरणबाट लगइन हुन सकेन।',
+            'Could not sign in. Check your username and password.',
+            'लगइन हुन सकेन। आफ्नो उपनाम र पासवर्ड जाँच्नुहोस्।',
           ),
       )
     }
@@ -191,8 +191,8 @@ export default function AuthPage({
         result?.error ||
           tx(
             language,
-            'Use a demo staff email or preview button while Firebase Auth is pending.',
-            'Firebase Auth जडान नभएसम्म नमुना कर्मचारी इमेल वा डेमो बटन प्रयोग गर्नुहोस्।',
+            'Could not sign in. Check your staff email and password.',
+            'लगइन हुन सकेन। आफ्नो कर्मचारी इमेल र पासवर्ड जाँच्नुहोस्।',
           ),
       )
     }
@@ -233,8 +233,8 @@ export default function AuthPage({
     setStatusMessage(
       tx(
         language,
-        'Demo NGO application submitted locally. In the connected build, Platform Admin verification is required before staff access.',
-        'नमुना संस्थाको आवेदन स्थानीय रूपमा दर्ता भयो। पूर्ण संस्करणमा पहुँच पाउनुअघि प्लेटफर्म प्रशासकको स्वीकृति आवश्यक हुन्छ।',
+        'Organization application submitted. Platform Admin verification is required before staff access.',
+        'संस्थाको आवेदन पेस भयो। कर्मचारी पहुँचअघि प्लेटफर्म प्रशासकको स्वीकृति आवश्यक हुन्छ।',
       ),
     )
     setNgoName('')
@@ -375,7 +375,6 @@ export default function AuthPage({
                     )}
                   </p>
                   <Field
-                    hint={tx(language, 'Demo code available in this frontend preview: NS-240001', 'यस फ्रन्टएन्ड डेमोमा नमुना कोड: NS-240001')}
                     label={tx(language, 'NGO handover code', 'संस्था हस्तान्तरण कोड')}
                   >
                     <input
@@ -531,48 +530,31 @@ export default function AuthPage({
             </Card>
 
             <aside className="auth-aside">
-              <Card className="auth-demo-card">
-                <p className="eyebrow">{tx(language, 'FRONTEND PREVIEW ONLY', 'फ्रन्टएन्ड पूर्वावलोकन मात्र')}</p>
-                <h3>{tx(language, 'Synthetic demo accounts', 'नमुना डेमो खाताहरू')}</h3>
-                <p>
-                  {tx(
-                    language,
-                    'Before Firebase Authentication is connected in the next phase, use these clearly labelled synthetic preview actions to inspect each authenticated dashboard.',
-                    'अर्को चरणमा Firebase Authentication जडान हुनुअघि यी नमुना पूर्वावलोकन बटनबाट ड्यासबोर्ड हेर्न सकिन्छ।',
-                  )}
-                </p>
-                <div className="auth-demo-actions">
+              <Card className="workspace-choice-card">
+                <h3>{tx(language, 'Choose a workspace', 'कार्यस्थल छान्नुहोस्')}</h3>
+                <p>{tx(language, 'Choose an account to continue.', 'अगाडि बढ्न खाता छान्नुहोस्।')}</p>
+                <div className="workspace-choice-actions">
                   <Button
                     icon="person"
                     onClick={() => onMemberLogin({ nickname: 'Sajilo', password: 'demo-member-password', preview: true })}
                     variant="secondary"
                   >
-                    {tx(language, 'Preview Member (Sajilo)', 'सदस्य पूर्वावलोकन (सजिलो)')}
+                    {tx(language, 'Member (Sajilo)', 'सदस्य (सजिलो)')}
                   </Button>
                   <Button
                     icon="apartment"
                     onClick={() => onStaffLogin({ email: 'asha@sathi.example', password: 'demo-staff-password', previewRole: 'org' })}
                     variant="secondary"
                   >
-                    {tx(language, 'Preview NGO Dashboard', 'संस्था ड्यासबोर्ड पूर्वावलोकन')}
+                    {tx(language, 'NGO Dashboard', 'संस्था ड्यासबोर्ड')}
                   </Button>
                   <Button
                     icon="admin_panel_settings"
                     onClick={() => onStaffLogin({ email: 'admin@nayasahara.example', password: 'demo-admin-password', previewRole: 'admin' })}
                     variant="secondary"
                   >
-                    {tx(language, 'Preview Platform Admin', 'प्लेटफर्म प्रशासक पूर्वावलोकन')}
+                    {tx(language, 'Platform Admin', 'प्लेटफर्म प्रशासक')}
                   </Button>
-                </div>
-                <div className="notice-inline notice-inline-warning">
-                  <Icon name="security" />
-                  <span>
-                    {tx(
-                      language,
-                      'Demo shortcuts are for local UI review only and will be replaced by real Firebase Auth & server claims.',
-                      'यी डेमो बटनहरू स्थानीय UI जाँचका लागि मात्र हुन् र वास्तविक Firebase Auth सँग बदलिनेछन्।',
-                    )}
-                  </span>
                 </div>
               </Card>
             </aside>

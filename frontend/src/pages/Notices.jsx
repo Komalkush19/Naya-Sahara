@@ -109,7 +109,6 @@ function NoticeDraftModal({
   const [deadline, setDeadline] = useState(initialData?.deadline || '')
   const [sourceAuthority, setSourceAuthority] = useState(initialData?.sourceAuthority || '')
   const [sourceUrl, setSourceUrl] = useState(initialData?.sourceUrl || '')
-  const [ocrNoticeMessage, setOcrNoticeMessage] = useState('')
 
   const close = () => {
     setTitle('')
@@ -122,33 +121,7 @@ function NoticeDraftModal({
     setDeadline('')
     setSourceAuthority('')
     setSourceUrl('')
-    setOcrNoticeMessage('')
     onClose()
-  }
-
-  // Simulated OCR / PDF extraction handler (honestly labelled as simulated demonstration)
-  const handleSimulatedOcr = () => {
-    setTitle('Vocational Skills Training Stipend Notice (Scanned Gazette Demo)')
-    setSource('gov')
-    setSourceAuthority('Ministry of Women, Children and Senior Citizens (Demonstration metadata)')
-    setSourceUrl('') // As instructed: Use sourceUrl: null if no official source has been verified; never fabricate link
-    setOriginalLanguage('ne')
-    setLocation('Bagmati Province')
-    setEligibility('Adult women community members; verify through local district social office.')
-    setDeadline('Dec 30, 2026')
-    setOriginal(
-      'नेपाल सरकार महिला, बालबालिका तथा ज्येष्ठ नागरिक मन्त्रालयको राजपत्र सूचना अनुसार पुनर्स्थापना केन्द्रहरूलाई लक्षित गरी आयआर्जनमूलक व्यावसायिक अनुदान विनियोजन गरिएको छ। (Scanned PDF OCR Demo Extract)',
-    )
-    setNepaliTranslation('आयआर्जनमूलक सीप विकासका लागि प्रादेशिक व्यावसायिक तालिम भत्ताका लागि आवेदन खुला गरिएको छ।')
-    setEnglishTranslation('Provincial vocational training stipends announced to support women in income-generating livelihoods.')
-    setSimplifiedSummary('सरकारी व्यावसायिक तालिम अनुदान सूचना। स्थानीय सामाजिक विकास कार्यालयमार्फत आवेदन दिन सकिनेछ।')
-    setOcrNoticeMessage(
-      tx(
-        language,
-        'Draft populated from simulated OCR demonstration. All extracted fields are editable and remain unpublished until admin verification.',
-        'सिम्युलेटेड OCR डेमोबाट मस्यौदा भरियो। सबै विवरणहरू सम्पादनयोग्य छन् र प्रशासकीय प्रमाणीकरण नभएसम्म प्रकाशित हुँदैनन्।',
-      ),
-    )
   }
 
   const handleAction = (asDraft) => {
@@ -168,7 +141,7 @@ function NoticeDraftModal({
         location: location.trim() || 'Bagmati Province',
         eligibility: eligibility.trim() || 'Open to all community members.',
         deadline: deadline.trim() || 'Open',
-        sourceAuthority: sourceAuthority.trim() || (source === 'gov' ? 'Government of Nepal (Demo attribution)' : 'NGO Partner'),
+        sourceAuthority: sourceAuthority.trim() || (source === 'gov' ? 'Source not verified' : 'NGO Partner'),
         sourceUrl: sourceUrl.trim() || null,
         isSyntheticDemo: true,
         aiGenerated: Boolean(nepaliTranslation || englishTranslation || simplifiedSummary),
@@ -204,26 +177,6 @@ function NoticeDraftModal({
           handleAction(false)
         }}
       >
-        {/* Simulated OCR Demo Button */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f5f0eb', padding: '10px 14px', borderRadius: '8px' }}>
-          <div>
-            <strong style={{ fontSize: '13px' }}>{tx(language, 'Simulated PDF / Gazette OCR Extract (Demo)', 'नमुना PDF / राजपत्र OCR पाठ संकलन (डेमो)')}</strong>
-            <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-              {tx(language, 'Demonstrates accessibility ingestion from public gazette scans without live cloud processing.', 'क्लाउड प्रशोधन बिना सार्वजनिक राजपत्रबाट नमुना पाठ संकलनको प्रदर्शन।')}
-            </p>
-          </div>
-          <Button icon="document_scanner" onClick={handleSimulatedOcr} size="small" type="button" variant="secondary">
-            {tx(language, 'Run OCR Demo', 'OCR डेमो चलाउनुहोस्')}
-          </Button>
-        </div>
-
-        {ocrNoticeMessage && (
-          <div className="notice-inline notice-inline-info">
-            <Icon name="verified_user" />
-            <span>{ocrNoticeMessage}</span>
-          </div>
-        )}
-
         <div className="form-row">
           <Field label={tx(language, 'Notice type', 'सूचनाको प्रकार')}>
             <select
@@ -282,7 +235,7 @@ function NoticeDraftModal({
               value={sourceAuthority}
             />
           </Field>
-          <Field label={tx(language, 'Source URL (Leave blank if unverified in demo)', 'स्रोत लिङ्क (प्रमाणित नभए खाली छोड्नुहोस्)')}>
+          <Field label={tx(language, 'Source URL (leave blank if unverified)', 'स्रोत लिङ्क (प्रमाणित नभए खाली छोड्नुहोस्)')}>
             <input
               className="input-control"
               onChange={(e) => setSourceUrl(e.target.value)}
@@ -469,7 +422,6 @@ function NoticeDetailModal({ open, onClose, notice, language }) {
               <Badge tone="mint">{tx(language, 'Verified NGO Notice', 'प्रमाणित संस्थागत सूचना')}</Badge>
             )}
             <Badge tone="neutral">{notice.category || 'Public Support'}</Badge>
-            <Badge tone="lavender">{tx(language, 'Demonstration Record', 'नमुना अभिलेख')}</Badge>
           </div>
 
           <div style={{ display: 'flex', gap: '6px' }}>
@@ -496,15 +448,15 @@ function NoticeDetailModal({ open, onClose, notice, language }) {
           </div>
           <div>
             <span>{tx(language, 'Publication Date', 'प्रकाशन मिति')}</span>
-            <strong>{notice.publicationDate || 'Nov 2026 (Demo)'}</strong>
+            <strong>{notice.publicationDate || 'Nov 2026'}</strong>
           </div>
           <div>
             <span>{tx(language, 'Ingestion Date', 'संकलन मिति')}</span>
-            <strong>{notice.ingestionDate || 'Nov 2026 (Demo)'}</strong>
+            <strong>{notice.ingestionDate || 'Nov 2026'}</strong>
           </div>
         </div>
 
-        {/* Verified Source URL or honest demonstration fallback */}
+        {/* Verified source URL */}
         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
           <strong>{tx(language, 'Official Source Link:', 'आधिकारिक स्रोत लिङ्क:')}</strong>{' '}
           {notice.sourceUrl ? (
@@ -512,7 +464,7 @@ function NoticeDetailModal({ open, onClose, notice, language }) {
               {notice.sourceUrl}
             </a>
           ) : (
-            <span>{tx(language, 'None provided in synthetic demonstration (sourceUrl: null).', 'नमुना प्रदर्शनमा कुनै बाह्य लिङ्क समावेश छैन (sourceUrl: null)।')}</span>
+            <span>{tx(language, 'No official source link provided.', 'आधिकारिक स्रोत लिङ्क उपलब्ध छैन।')}</span>
           )}
         </div>
 
@@ -554,7 +506,7 @@ function NoticeDetailModal({ open, onClose, notice, language }) {
                   : tx(language, 'Plain-Language Explanation', 'सरल भाषामा स्पष्टीकरण')}
             </span>
             {viewMode !== 'original' && (
-              <Badge tone="lavender">{tx(language, 'AI-Assisted Simplification', 'AI-सहयोगित सरल व्याख्या')}</Badge>
+              <Badge tone="lavender">{tx(language, 'Plain-language explanation', 'सरल भाषामा व्याख्या')}</Badge>
             )}
             {viewMode === 'original' && (
               <Badge tone="neutral">{tx(language, 'Original Official Record', 'मूल आधिकारिक अभिलेख')}</Badge>
@@ -941,7 +893,7 @@ export default function NoticesPage({
                 <div className="notice-content-box notice-translation-box">
                   <span className="content-label">
                     {tx(language, 'SIMPLIFIED PLAIN-LANGUAGE', 'सरल व्याख्या')}
-                    <Badge tone="lavender" style={{ marginLeft: '6px' }}>{tx(language, 'AI-Assisted', 'AI-सहयोगित')}</Badge>
+                    <Badge tone="lavender" style={{ marginLeft: '6px' }}>{tx(language, 'Simplified', 'सरल')}</Badge>
                   </span>
                   <p>{notice.simplifiedSummary || notice.nepaliTranslation || notice.translation || notice.original}</p>
                 </div>

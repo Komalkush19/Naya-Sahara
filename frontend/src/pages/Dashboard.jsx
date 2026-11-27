@@ -183,8 +183,8 @@ function OrgAdminHome({
       <PageHeader
         description={tx(
           language,
-          'A clear view of today’s service work. All metrics shown here are demonstration data.',
-          'आजको सेवा कार्यको स्पष्ट दृश्य। यहाँ देखाइएका सबै विवरणहरू नमुना प्रदर्शन डेटा हुन्।',
+          'A clear view of today’s service work.',
+          'आजको सेवा कार्यको स्पष्ट दृश्य।',
         )}
         eyebrow={tx(language, 'ORG ADMIN WORKSPACE', 'संस्था प्रशासक कार्यस्थल')}
         title={tx(language, 'Good morning, Asha Sathi', 'शुभ प्रभात, आशा साथी')}
@@ -195,7 +195,7 @@ function OrgAdminHome({
         <StatCard
           icon="badge"
           label={tx(language, 'Associated Women', 'सम्बद्ध महिलाहरू')}
-          note={tx(language, 'Demonstration members', 'नमुना सदस्य संख्या')}
+          note={tx(language, 'Members', 'सदस्यहरू')}
           tone="mint"
           value={associatedWomenCount}
         />
@@ -256,10 +256,8 @@ function OrgAdminHome({
 
         <Card className="section-card admin-guidance">
           <div className="guidance-icon"><Icon name="shield_lock" size={26} /></div>
-          <p className="eyebrow">{tx(language, 'DEMONSTRATION SAFE', 'सुरक्षित नमुना')}</p>
           <h2>{tx(language, 'Privacy-first support', 'गोपनीयता-केन्द्रित सहयोग')}</h2>
-          <p>{tx(language, 'Naya Sahara connects women to support without storing court records, offence histories, medical diagnoses, or real identities. All metrics and profiles shown here are demonstration-safe.', 'नयाँ सहाराले कानुनी मुद्दा, कसुर इतिहास, स्वास्थ्य विवरण वा वास्तविक पहिचान नराखी महिलाहरूलाई सहयोगसँग जोड्छ। यहाँ देखाइएका सबै विवरणहरू नमुना र सुरक्षित छन्।')}</p>
-          <Badge tone="green">{tx(language, 'Demo safe', 'डेमो सुरक्षित')}</Badge>
+          <p>{tx(language, 'Naya Sahara connects women to support without storing court records, offence histories, medical diagnoses, or real identities.', 'नयाँ सहाराले कानुनी मुद्दा, कसुर इतिहास, स्वास्थ्य विवरण वा वास्तविक पहिचान नराखी महिलाहरूलाई सहयोगसँग जोड्छ।')}</p>
         </Card>
       </div>
     </>
@@ -407,7 +405,7 @@ function PlatformAdminHome({
         />
         <StatCard
           icon="groups"
-          label={tx(language, 'Registered Women (Demo)', 'दर्ता महिला (नमुना)')}
+          label={tx(language, 'Registered Women', 'दर्ता महिला')}
           note={tx(language, 'Pseudonymous profiles', 'उपनामयुक्त प्रोफाइल')}
           tone="mint"
           value={registeredWomenCount}
@@ -530,8 +528,7 @@ function PlatformAdminHome({
                   </div>
                   <div className="notice-content-box notice-translation-box">
                     <span className="content-label">
-                      {tx(language, 'AI-ASSISTED PLAIN-LANGUAGE EXPLANATION', 'AI-सहयोगित सरल व्याख्या')}
-                      <Badge tone="lavender" style={{ marginLeft: '6px' }}>{tx(language, 'Preview', 'पूर्वावलोकन')}</Badge>
+                      {tx(language, 'PLAIN-LANGUAGE EXPLANATION', 'सरल भाषामा व्याख्या')}
                     </span>
                     <p>{notice.simplifiedSummary || notice.nepaliTranslation || notice.translation || notice.original}</p>
                   </div>
@@ -621,7 +618,7 @@ function PlatformAdminHome({
                     </div>
                     <div>
                       <span>{tx(language, 'Associated Women', 'सम्बद्ध महिला')}</span>
-                      <strong>{org.associatedCount || 3} (Demo)</strong>
+                      <strong>{org.associatedCount || 3}</strong>
                     </div>
                   </div>
 

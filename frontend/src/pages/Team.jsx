@@ -118,7 +118,7 @@ export default function TeamPage({ team, onAdd, onUpdate, onToggle, language }) 
 
       <div className="notice-inline notice-inline-info approval-note">
         <Icon name="badge" />
-        <span>{tx(language, 'Staff roster is demonstration-only. No individual accounts, court dates, or case assignments are maintained.', 'कर्मचारी सूची केवल नमुना प्रदर्शनका लागि हो। कुनै व्यक्तिगत खाता, अदालतका मिति वा केस जिम्मेवारी राखिँदैन।')}</span>
+        <span>{tx(language, 'Staff profiles show service information only; court dates and case assignments are not shown.', 'कर्मचारी प्रोफाइलमा सेवा सम्बन्धी जानकारी मात्र देखाइन्छ; अदालतका मिति र केस जिम्मेवारी देखाइँदैन।')}</span>
       </div>
 
       <div className="team-list">

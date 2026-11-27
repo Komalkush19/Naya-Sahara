@@ -156,9 +156,6 @@ export default function LandingPage({
         <section className="landing-hero">
           <div className="landing-container landing-hero-grid">
             <div className="landing-hero-copy">
-              <Badge dot tone="lavender">
-                {tx(language, 'HACKATHON PROTOTYPE · SYNTHETIC DEMO DATA', 'ह्याकाथन प्रोटोटाइप · नमुना डेटा मात्र')}
-              </Badge>
               <h1>
                 {tx(
                   language,
@@ -287,7 +284,7 @@ export default function LandingPage({
             <div className="landing-section-head">
               <div>
                 <p className="eyebrow">{tx(language, 'VERIFIED ORGANIZATIONS', 'स्वीकृत संस्थाहरू')}</p>
-                <h2>{tx(language, 'Featured support organizations (demo directory)', 'प्रमुख सहयोग संस्थाहरू (नमुना सूची)')}</h2>
+                <h2>{tx(language, 'Featured support organizations', 'प्रमुख सहयोग संस्थाहरू')}</h2>
               </div>
               <Button icon="apartment" onClick={() => onEnterGuest('organizations')} variant="secondary">
                 {tx(language, 'Browse all NGOs', 'सबै संस्था हेर्नुहोस्')}
@@ -313,7 +310,7 @@ export default function LandingPage({
                   </div>
                   <p>{org.focus}</p>
                   <div className="organization-card-footer">
-                    <span><Icon name="call" size={16} />{org.contactPhone || tx(language, 'Demo contact', 'नमुना सम्पर्क')}</span>
+                    <span><Icon name="call" size={16} />{org.contactPhone || tx(language, 'Contact information unavailable', 'सम्पर्क जानकारी उपलब्ध छैन')}</span>
                     <Button onClick={() => onEnterGuest('organizations')} variant="secondary">
                       {tx(language, 'View profile', 'प्रोफाइल हेर्नुहोस्')}
                     </Button>
@@ -367,22 +364,17 @@ export default function LandingPage({
               </p>
             </div>
             <Card className="landing-partner-card" id="landing-partners">
-              <p className="eyebrow">{tx(language, 'PARTNERS & FUNDERS (PLACEHOLDERS)', 'साझेदार र सहयोगी (नमुना स्थान)')}</p>
-              <h3>{tx(language, 'Built for the WLiT Fellowship 2026/27 Hackathon', 'WLiT फेलोशिप २०२६/२७ ह्याकाथनका लागि निर्मित')}</h3>
+              <h3>{tx(language, 'Community partnerships', 'सामुदायिक साझेदारी')}</h3>
               <p>
                 {tx(
                   language,
-                  'No external funders or NGO partnerships are claimed in this hackathon build. Verified partner and supporter logos will appear here after real-world onboarding.',
-                  'यस ह्याकाथन संस्करणमा कुनै वास्तविक दाता वा साझेदारी दाबी गरिएको छैन। वास्तविक सहकार्यपछि मात्र साझेदार विवरण यहाँ राखिनेछ।',
+                  'Naya Sahara brings support organizations and public information together to help women find services.',
+                  'महिलाहरूलाई सेवा खोज्न सहयोग गर्न नयाँ सहाराले सहयोगी संस्था र सार्वजनिक जानकारीलाई एकै ठाउँमा जोड्छ।',
                 )}
               </p>
-              <div className="landing-partner-slots">
-                <span className="partner-slot">{tx(language, 'Partner slot 1 (Placeholder)', 'साझेदार स्थान १ (नमुना)')}</span>
-                <span className="partner-slot">{tx(language, 'Funder slot 2 (Placeholder)', 'सहयोगी स्थान २ (नमुना)')}</span>
-              </div>
               <div className="landing-donate-row">
                 <Button icon="volunteer_activism" onClick={() => setDonateOpen(true)} variant="secondary">
-                  {tx(language, 'Donate (Demo info)', 'सहयोग जानकारी (डेमो)')}
+                  {tx(language, 'Donation information', 'सहयोग जानकारी')}
                 </Button>
               </div>
             </Card>
@@ -397,8 +389,8 @@ export default function LandingPage({
             <p>
               {tx(
                 language,
-                'Service discovery and safe communication prototype. Synthetic demo data only; not legal advice.',
-                'सहयोग खोज र सुरक्षित संवाद प्रोटोटाइप। नमुना डेटा मात्र; कानुनी सल्लाह होइन।',
+                'Service discovery and safe communication. Not legal advice.',
+                'सहयोग खोज र सुरक्षित संवाद। कानुनी सल्लाह होइन।',
               )}
             </p>
           </div>
@@ -415,7 +407,6 @@ export default function LandingPage({
             <ul>
               <li><button className="footer-link-btn" onClick={() => onOpenAuth('login')} type="button">{tx(language, 'Login', 'लगइन')}</button></li>
               <li><button className="footer-link-btn" onClick={() => onOpenAuth('register')} type="button">{tx(language, 'Register with Handover Code', 'हस्तान्तरण कोडबाट दर्ता')}</button></li>
-              <li><span>{tx(language, 'Demo contact: demo@nayasahara.example', 'नमुना सम्पर्क: demo@nayasahara.example')}</span></li>
             </ul>
           </div>
         </div>
@@ -424,12 +415,12 @@ export default function LandingPage({
       <Modal
         description={tx(
           language,
-          'This hackathon prototype uses synthetic data only and does not process real donations or financial transactions.',
-          'यो ह्याकाथन प्रोटोटाइप नमुना डेटामा आधारित छ र वास्तविक आर्थिक कारोबार वा चन्दा संकलन गर्दैन।',
+          'For donation options, contact a support organization directly.',
+          'सहयोगका विकल्पबारे जानकारीका लागि सहयोगी संस्थालाई सिधै सम्पर्क गर्नुहोस्।',
         )}
         onClose={() => setDonateOpen(false)}
         open={donateOpen}
-        title={tx(language, 'Donation information (Demo placeholder)', 'सहयोग जानकारी (नमुना)')}
+        title={tx(language, 'Donation information', 'सहयोग जानकारी')}
       >
         <div className="notice-inline notice-inline-info">
           <Icon name="info" />

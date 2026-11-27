@@ -39,7 +39,7 @@ export default function MemberClaimPage({ claimCode, onClaim, language }) {
             <input autoComplete="new-password" className="input-control" inputMode="numeric" maxLength={6} onChange={(event) => { setPin(event.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }} pattern="\d{4,6}" required type="password" value={pin} />
           </Field>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <div className="claim-privacy-note"><Icon name="visibility_off" size={17} /><span>{tx(language, 'Your profile uses your nickname only. This is a local synthetic demo, not a real account.', 'तपाईंको प्रोफाइलमा उपनाम मात्र देखिन्छ। यो स्थानीय नमुना डेमो हो, वास्तविक खाता होइन।')}</span></div>
+          <div className="claim-privacy-note"><Icon name="visibility_off" size={17} /><span>{tx(language, 'Your profile uses your nickname only.', 'तपाईंको प्रोफाइलमा उपनाम मात्र देखिन्छ।')}</span></div>
           <Button className="claim-submit" icon="arrow_forward" type="submit">{tx(language, 'Claim and continue', 'खोल्नुहोस् र अगाडि बढ्नुहोस्')}</Button>
         </form>
       </Card>

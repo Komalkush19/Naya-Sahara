@@ -502,8 +502,8 @@ export default function App() {
         ok: false,
         error: tx(
           language,
-          'Invalid or already used handover code. In this frontend demo, try NS-240001 or generate a new code from the NGO dashboard.',
-          'अमान्य वा प्रयोग भइसकेको हस्तान्तरण कोड। यस डेमोमा NS-240001 प्रयोग गर्नुहोस् वा संस्था ड्यासबोर्डबाट नयाँ कोड जारी गर्नुहोस्।',
+          'Invalid or already used handover code. Check the code or request a new one from your NGO.',
+          'अमान्य वा प्रयोग भइसकेको हस्तान्तरण कोड। कोड जाँच्नुहोस् वा संस्थाबाट नयाँ कोड माग्नुहोस्।',
         ),
       }
     }
@@ -568,8 +568,8 @@ export default function App() {
         ok: false,
         error: tx(
           language,
-          'Invalid nickname or password. Use the demo preview button or register with NS-240001.',
-          'गलत उपनाम वा पासवर्ड। डेमो पूर्वावलोकन बटन वा NS-240001 कोडबाट दर्ता गर्नुहोस्।',
+          'Invalid nickname or password. Check your details or register with an NGO handover code.',
+          'गलत उपनाम वा पासवर्ड। विवरण जाँच्नुहोस् वा संस्था हस्तान्तरण कोडबाट दर्ता गर्नुहोस्।',
         ),
       }
     }
@@ -716,7 +716,7 @@ export default function App() {
         ingestionDate: new Date().toISOString().split('T')[0],
         orgName:
           notice.source === 'gov'
-            ? notice.orgName || 'Government of Nepal (Demo attribution)'
+            ? notice.orgName || 'Source not verified'
             : role === 'org'
               ? 'Asha Sathi Nepal'
               : notice.orgName || 'Public Announcement',

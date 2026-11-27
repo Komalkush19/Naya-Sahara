@@ -110,13 +110,6 @@ export default function AppShell({
         />
 
         <div className="sidebar-bottom">
-          <div className="demo-note">
-            <Icon name="verified_user" size={18} />
-            <div>
-              <strong>{tx(language, 'Demo workspace', 'डेमो कार्यस्थल')}</strong>
-              <span>{tx(language, 'Synthetic data only', 'नमुना डेटा मात्र')}</span>
-            </div>
-          </div>
           <div className="sidebar-profile">
             <div className="avatar avatar-small">
               {role === 'member' ? (
@@ -240,8 +233,7 @@ export default function AppShell({
         </header>
         <main className="main-content">{children}</main>
         <footer className="app-footer">
-          <span>{memberView ? tx(language, 'Personal support space', 'व्यक्तिगत सहयोग क्षेत्र') : tx(language, 'Naya Sahara · Hackathon demo', 'नयाँ सहारा · ह्याकाथन डेमो')}</span>
-          <span>{tx(language, 'No real member data', 'वास्तविक सदस्यको डेटा छैन')}</span>
+          <span>{memberView ? tx(language, 'Personal support space', 'व्यक्तिगत सहयोग क्षेत्र') : 'Naya Sahara · नयाँ सहारा'}</span>
         </footer>
       </div>
     </div>
