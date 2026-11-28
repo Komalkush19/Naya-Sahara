@@ -57,3 +57,17 @@ Thumbs.db
 
 # Build output
 dist/
+.vercel
+.env*
+
+# Build output
+dist/
+
+# Vercel local configuration
+.vercel/
+
+# Local environment variables
+.env
+.env.*
+!.env.example
+!.env.sample

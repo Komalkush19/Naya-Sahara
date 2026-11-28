@@ -1,12 +1,14 @@
 /**
- * /api/cases — Case Management endpoint.
+ * /api/cases/index.js — Unified Case Management and Progress Notes endpoint.
  *
- * GET  /api/cases               — List cases.
- *                                 - NGO staff: returns all cases for their orgId (or filtered by memberId).
- *                                 - Member: returns their own cases only.
- *                                 - Platform Admin: returns all cases (or by orgId/memberId).
- * POST /api/cases               — NGO staff creates a case for an associated member.
- * PUT  /api/cases               — NGO staff updates permitted case fields (status, priority, assigned caseworker, title, description).
+ * Routes handled:
+ *   /api/cases (or path !== 'notes'):
+ *     GET  /api/cases               — List cases (by org, member, or admin).
+ *     POST /api/cases               — NGO staff creates a case.
+ *     PUT  /api/cases               — NGO staff updates case fields.
+ *   /api/cases/notes (or ?sub=notes):
+ *     GET  /api/cases/notes?caseId=... — Retrieve progress notes.
+ *     POST /api/cases/notes            — NGO staff adds progress note.
  */
 
 import crypto from "node:crypto";
@@ -36,7 +38,163 @@ async function verifyToken(req, auth) {
   }
 }
 
+// ─── Sub-handler for Notes ───────────────────────────────────────────────────
+export async function handleCaseNotes(req, res, { db = adminDb, auth = adminAuth } = {}) {
+  const decoded = await verifyToken(req, auth);
+  if (!decoded) {
+    return sendJson(res, 401, { ok: false, error: "Authentication required" });
+  }
+
+  const { role, uid, orgId } = decoded;
+
+  // ─── GET /api/cases/notes?caseId=... ────────────────────────────────────────
+  if (req.method === "GET") {
+    const url = new URL(req.url, `http://localhost`);
+    const caseId = url.searchParams.get("caseId");
+
+    if (!caseId || typeof caseId !== "string" || !caseId.trim()) {
+      return sendJson(res, 400, { ok: false, error: "caseId is required" });
+    }
+
+    const caseSnap = await db.collection("cases").doc(caseId.trim()).get();
+    if (!caseSnap.exists) {
+      return sendJson(res, 404, { ok: false, error: "Case not found" });
+    }
+
+    const caseData = caseSnap.data();
+
+    // Authorization check
+    if (role === "ngo_admin") {
+      if (!orgId || caseData.orgId !== orgId) {
+        return sendJson(res, 403, { ok: false, error: "Access denied to case notes of another organization" });
+      }
+    } else if (role === "member") {
+      if (caseData.memberId !== uid) {
+        return sendJson(res, 403, { ok: false, error: "Access denied to another member's case notes" });
+      }
+    } else if (role !== "platform_admin") {
+      return sendJson(res, 403, { ok: false, error: "Unauthorized access" });
+    }
+
+    try {
+      const notesSnap = await db
+        .collection("cases")
+        .doc(caseId.trim())
+        .collection("notes")
+        .get();
+
+      let notes = notesSnap.docs.map((doc) => {
+        const d = doc.data();
+        let createdAtMillis = 0;
+        if (d.createdAt && typeof d.createdAt.toMillis === "function") {
+          createdAtMillis = d.createdAt.toMillis();
+        } else if (typeof d.createdAt === "number") {
+          createdAtMillis = d.createdAt;
+        } else if (typeof d.createdAt === "string") {
+          createdAtMillis = new Date(d.createdAt).getTime();
+        }
+
+        return {
+          id: doc.id,
+          ...d,
+          createdAt: createdAtMillis,
+        };
+      });
+
+      // Filter: Members must only see member_visible notes
+      if (role === "member") {
+        notes = notes.filter((n) => n.visibility === "member_visible");
+      }
+
+      // Sort descending by createdAt
+      notes.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+      return sendJson(res, 200, { ok: true, notes });
+    } catch {
+      return sendJson(res, 500, { ok: false, error: "Failed to retrieve case notes" });
+    }
+  }
+
+  // ─── POST /api/cases/notes (Add Note) ──────────────────────────────────────
+  if (req.method === "POST") {
+    if (role !== "ngo_admin" && role !== "platform_admin") {
+      return sendJson(res, 403, { ok: false, error: "Only authorized NGO staff can add case notes" });
+    }
+
+    const body = await parseJsonBody(req);
+    if (!body) {
+      return sendJson(res, 400, { ok: false, error: "Invalid JSON body" });
+    }
+
+    const { caseId, content, visibility = "internal", authorName, authorRole } = body;
+
+    if (!caseId || typeof caseId !== "string" || !caseId.trim()) {
+      return sendJson(res, 400, { ok: false, error: "caseId is required" });
+    }
+    if (!content || typeof content !== "string" || !content.trim()) {
+      return sendJson(res, 400, { ok: false, error: "content cannot be empty" });
+    }
+    if (visibility !== "internal" && visibility !== "member_visible") {
+      return sendJson(res, 400, { ok: false, error: "visibility must be 'internal' or 'member_visible'" });
+    }
+
+    const caseRef = db.collection("cases").doc(caseId.trim());
+    const caseSnap = await caseRef.get();
+    if (!caseSnap.exists) {
+      return sendJson(res, 404, { ok: false, error: "Case not found" });
+    }
+
+    const caseData = caseSnap.data();
+
+    if (role === "ngo_admin") {
+      if (!orgId || caseData.orgId !== orgId) {
+        return sendJson(res, 403, { ok: false, error: "Cannot add notes to a case belonging to another organization" });
+      }
+    }
+
+    const noteId = `note_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    const newNote = {
+      caseId: caseId.trim(),
+      authorId: uid,
+      authorName: authorName || "Caseworker",
+      authorRole: authorRole || "Staff",
+      content: content.trim(),
+      visibility,
+      createdAt: FieldValue.serverTimestamp(),
+    };
+
+    try {
+      await caseRef.collection("notes").doc(noteId).set(newNote);
+      await caseRef.update({
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      return sendJson(res, 201, {
+        ok: true,
+        noteId,
+        note: {
+          id: noteId,
+          ...newNote,
+          createdAt: Date.now(),
+        },
+      });
+    } catch {
+      return sendJson(res, 500, { ok: false, error: "Failed to record case note" });
+    }
+  }
+
+  res.setHeader("Allow", "GET, POST");
+  return sendJson(res, 405, { ok: false, error: "Method Not Allowed" });
+}
+
+// ─── Sub-handler for Cases ───────────────────────────────────────────────────
 export async function handleCases(req, res, { db = adminDb, auth = adminAuth } = {}) {
+  // Check if routed for notes
+  const url = new URL(req.url, `http://localhost`);
+  if (url.pathname.endsWith("/notes") || url.searchParams.get("sub") === "notes") {
+    return handleCaseNotes(req, res, { db, auth });
+  }
+
   const decoded = await verifyToken(req, auth);
   if (!decoded) {
     return sendJson(res, 401, { ok: false, error: "Authentication required" });
@@ -46,7 +204,6 @@ export async function handleCases(req, res, { db = adminDb, auth = adminAuth } =
 
   // ─── GET /api/cases ────────────────────────────────────────────────────────
   if (req.method === "GET") {
-    const url = new URL(req.url, `http://localhost`);
     const memberIdFilter = url.searchParams.get("memberId");
     const statusFilter = url.searchParams.get("status");
 
@@ -62,15 +219,10 @@ export async function handleCases(req, res, { db = adminDb, auth = adminAuth } =
           queryRef = queryRef.where("memberId", "==", memberIdFilter);
         }
       } else if (role === "member") {
-        // Members only see their own cases
         queryRef = queryRef.where("memberId", "==", uid);
       } else if (role === "platform_admin") {
-        if (orgId) {
-          queryRef = queryRef.where("orgId", "==", orgId);
-        }
-        if (memberIdFilter) {
-          queryRef = queryRef.where("memberId", "==", memberIdFilter);
-        }
+        if (orgId) queryRef = queryRef.where("orgId", "==", orgId);
+        if (memberIdFilter) queryRef = queryRef.where("memberId", "==", memberIdFilter);
       } else {
         return sendJson(res, 403, { ok: false, error: "Unauthorized access" });
       }
@@ -82,28 +234,33 @@ export async function handleCases(req, res, { db = adminDb, auth = adminAuth } =
       const snap = await queryRef.get();
       const cases = snap.docs.map((doc) => {
         const d = doc.data();
+        let createdAtMillis = 0;
+        let updatedAtMillis = 0;
+        if (d.createdAt && typeof d.createdAt.toMillis === "function") {
+          createdAtMillis = d.createdAt.toMillis();
+        } else if (typeof d.createdAt === "number") {
+          createdAtMillis = d.createdAt;
+        } else if (typeof d.createdAt === "string") {
+          createdAtMillis = new Date(d.createdAt).getTime();
+        }
+
+        if (d.updatedAt && typeof d.updatedAt.toMillis === "function") {
+          updatedAtMillis = d.updatedAt.toMillis();
+        } else if (typeof d.updatedAt === "number") {
+          updatedAtMillis = d.updatedAt;
+        } else if (typeof d.updatedAt === "string") {
+          updatedAtMillis = new Date(d.updatedAt).getTime();
+        }
+
         return {
           id: doc.id,
-          caseId: doc.id,
-          memberId: d.memberId || "",
-          memberNickname: d.memberNickname || "",
-          orgId: d.orgId || "",
-          caseTitle: d.caseTitle || "",
-          category: d.category || "General Support",
-          priority: d.priority || "medium",
-          status: d.status || "open",
-          description: d.description || "",
-          assignedStaffId: d.assignedStaffId || null,
-          assignedStaffName: d.assignedStaffName || null,
-          archived: Boolean(d.archived),
-          createdAt: d.createdAt?.toMillis ? d.createdAt.toMillis() : (d.createdAt || null),
-          updatedAt: d.updatedAt?.toMillis ? d.updatedAt.toMillis() : (d.updatedAt || null),
-          createdBy: d.createdBy || "",
+          ...d,
+          createdAt: createdAtMillis,
+          updatedAt: updatedAtMillis,
         };
       });
 
-      // Sort in memory by updatedAt or createdAt desc
-      cases.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+      cases.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
       return sendJson(res, 200, { ok: true, cases });
     } catch {
@@ -117,22 +274,22 @@ export async function handleCases(req, res, { db = adminDb, auth = adminAuth } =
       return sendJson(res, 403, { ok: false, error: "Only authorized NGO staff can create cases" });
     }
     if (!orgId) {
-      return sendJson(res, 403, { ok: false, error: "No organization associated with staff profile" });
+      return sendJson(res, 403, { ok: false, error: "Staff member has no associated organization" });
     }
 
     const body = await parseJsonBody(req);
     if (!body) {
-      return sendJson(res, 400, { ok: false, error: "Invalid JSON payload" });
+      return sendJson(res, 400, { ok: false, error: "Invalid JSON body" });
     }
 
     const {
       memberId,
       caseTitle,
-      category,
-      priority,
-      description,
-      assignedStaffId,
-      assignedStaffName,
+      category = "General Support",
+      priority = "medium",
+      description = "",
+      assignedStaffId = uid,
+      assignedStaffName = "",
     } = body;
 
     if (!memberId || typeof memberId !== "string" || !memberId.trim()) {
@@ -141,67 +298,70 @@ export async function handleCases(req, res, { db = adminDb, auth = adminAuth } =
     if (!caseTitle || typeof caseTitle !== "string" || !caseTitle.trim()) {
       return sendJson(res, 400, { ok: false, error: "caseTitle is required" });
     }
-
-    // Security Check: Member MUST be associated with the caller's organization
-    const memberSnap = await db.collection("members").doc(memberId.trim()).get();
-    if (!memberSnap.exists) {
-      return sendJson(res, 404, { ok: false, error: "Associated member record not found" });
+    if (!VALID_CATEGORIES.includes(category)) {
+      return sendJson(res, 400, { ok: false, error: `Invalid category. Must be one of: ${VALID_CATEGORIES.join(", ")}` });
     }
+    if (!VALID_PRIORITIES.includes(priority)) {
+      return sendJson(res, 400, { ok: false, error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(", ")}` });
+    }
+
+    const memberRef = db.collection("members").doc(memberId.trim());
+    const memberSnap = await memberRef.get();
+    if (!memberSnap.exists) {
+      return sendJson(res, 404, { ok: false, error: "Associated member not found" });
+    }
+
     const memberData = memberSnap.data();
-    if (memberData.associatedOrgId !== orgId) {
+    const memberOrgId = memberData.orgId || memberData.associatedOrgId;
+    if (memberOrgId !== orgId) {
       return sendJson(res, 403, {
         ok: false,
-        error: "Member is not associated with your organization",
+        error: "Cannot create a case for a member not associated with your organization",
       });
     }
 
-    const casePriority = VALID_PRIORITIES.includes(priority) ? priority : "medium";
-    const caseCategory = VALID_CATEGORIES.includes(category) ? category : "General Support";
-    const caseStatus = "open";
-
     const caseId = `case_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
-    const now = FieldValue.serverTimestamp();
-
     const newCase = {
-      caseId,
       memberId: memberId.trim(),
-      memberNickname: memberData.nickname || "Member",
+      memberNickname: memberData.nickname || "Anonymous Member",
       orgId,
-      caseTitle: caseTitle.trim().slice(0, 200),
-      category: caseCategory,
-      priority: casePriority,
-      status: caseStatus,
-      description: typeof description === "string" ? description.trim().slice(0, 5000) : "",
-      assignedStaffId: assignedStaffId ? String(assignedStaffId).trim() : null,
-      assignedStaffName: assignedStaffName ? String(assignedStaffName).trim() : null,
-      archived: false,
+      assignedStaffId,
+      assignedStaffName: assignedStaffName || "Caseworker",
+      caseTitle: caseTitle.trim(),
+      category,
+      priority,
+      status: "open",
+      description: description ? description.trim() : "",
       createdBy: uid,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
 
     try {
       await db.collection("cases").doc(caseId).set(newCase);
 
-      // Audit log entry
-      const logId = `log_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+      const logId = `audit_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
       await db.collection("adminAuditLogs").doc(logId).set({
-        logId,
         action: "CASE_CREATED",
         targetType: "case",
         targetId: caseId,
         actorUid: uid,
-        actorRole: "ngo_admin",
-        details: {
-          orgId,
-          memberId: memberId.trim(),
-          caseTitle: newCase.caseTitle,
-          priority: casePriority,
-        },
-        timestamp: now,
+        actorRole: role,
+        orgId,
+        details: { memberId: memberId.trim(), caseTitle: caseTitle.trim(), category, priority },
+        timestamp: FieldValue.serverTimestamp(),
       });
 
-      return sendJson(res, 201, { ok: true, caseId, case: newCase });
+      return sendJson(res, 201, {
+        ok: true,
+        caseId,
+        case: {
+          id: caseId,
+          ...newCase,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      });
     } catch {
       return sendJson(res, 500, { ok: false, error: "Failed to create case record" });
     }
@@ -210,85 +370,83 @@ export async function handleCases(req, res, { db = adminDb, auth = adminAuth } =
   // ─── PUT /api/cases (Update Case) ──────────────────────────────────────────
   if (req.method === "PUT") {
     if (role !== "ngo_admin" && role !== "platform_admin") {
-      return sendJson(res, 403, { ok: false, error: "Unauthorized to update cases" });
+      return sendJson(res, 403, { ok: false, error: "Only authorized NGO staff can update cases" });
     }
 
     const body = await parseJsonBody(req);
-    if (!body) {
-      return sendJson(res, 400, { ok: false, error: "Invalid JSON payload" });
-    }
-
-    const { caseId } = body;
-    if (!caseId || typeof caseId !== "string" || !caseId.trim()) {
+    if (!body || !body.caseId) {
       return sendJson(res, 400, { ok: false, error: "caseId is required" });
     }
 
+    const { caseId, status, priority, assignedStaffId, assignedStaffName, caseTitle, description, category, archived } = body;
     const caseRef = db.collection("cases").doc(caseId.trim());
     const caseSnap = await caseRef.get();
+
     if (!caseSnap.exists) {
       return sendJson(res, 404, { ok: false, error: "Case not found" });
     }
 
-    const existingCase = caseSnap.data();
+    const currentCase = caseSnap.data();
 
-    // Security check: NGO staff can only update cases in their org
-    if (role === "ngo_admin" && existingCase.orgId !== orgId) {
-      return sendJson(res, 403, { ok: false, error: "Access denied to other organization's case" });
+    if (role === "ngo_admin") {
+      if (!orgId || currentCase.orgId !== orgId) {
+        return sendJson(res, 403, { ok: false, error: "Cannot modify a case belonging to another organization" });
+      }
     }
 
-    const updates = {
-      updatedAt: FieldValue.serverTimestamp(),
-    };
+    const updates = { updatedAt: FieldValue.serverTimestamp() };
 
-    if (body.caseTitle && typeof body.caseTitle === "string" && body.caseTitle.trim()) {
-      updates.caseTitle = body.caseTitle.trim().slice(0, 200);
+    if (status !== undefined) {
+      if (!VALID_STATUSES.includes(status)) {
+        return sendJson(res, 400, { ok: false, error: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` });
+      }
+      updates.status = status;
     }
-    if (body.description !== undefined && typeof body.description === "string") {
-      updates.description = body.description.trim().slice(0, 5000);
+
+    if (priority !== undefined) {
+      if (!VALID_PRIORITIES.includes(priority)) {
+        return sendJson(res, 400, { ok: false, error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(", ")}` });
+      }
+      updates.priority = priority;
     }
-    if (body.category && VALID_CATEGORIES.includes(body.category)) {
-      updates.category = body.category;
+
+    if (category !== undefined) {
+      if (!VALID_CATEGORIES.includes(category)) {
+        return sendJson(res, 400, { ok: false, error: `Invalid category. Must be one of: ${VALID_CATEGORIES.join(", ")}` });
+      }
+      updates.category = category;
     }
-    if (body.priority && VALID_PRIORITIES.includes(body.priority)) {
-      updates.priority = body.priority;
-    }
-    if (body.status && VALID_STATUSES.includes(body.status)) {
-      updates.status = body.status;
-    }
-    if (body.assignedStaffId !== undefined) {
-      updates.assignedStaffId = body.assignedStaffId ? String(body.assignedStaffId).trim() : null;
-    }
-    if (body.assignedStaffName !== undefined) {
-      updates.assignedStaffName = body.assignedStaffName ? String(body.assignedStaffName).trim() : null;
-    }
-    if (body.archived !== undefined) {
-      updates.archived = Boolean(body.archived);
-    }
+
+    if (assignedStaffId !== undefined) updates.assignedStaffId = assignedStaffId;
+    if (assignedStaffName !== undefined) updates.assignedStaffName = assignedStaffName;
+    if (caseTitle !== undefined && caseTitle.trim()) updates.caseTitle = caseTitle.trim();
+    if (description !== undefined) updates.description = description.trim();
+    if (archived !== undefined) updates.archived = Boolean(archived);
 
     try {
       await caseRef.update(updates);
 
-      // Audit log entry for significant updates (status change or caseworker assignment)
-      if (body.status || body.assignedStaffId !== undefined || body.archived !== undefined) {
-        const logId = `log_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
-        await db.collection("adminAuditLogs").doc(logId).set({
-          logId,
-          action: "CASE_UPDATED",
-          targetType: "case",
-          targetId: caseId.trim(),
-          actorUid: uid,
-          actorRole: role,
-          details: {
-            orgId: existingCase.orgId,
-            statusChange: body.status || null,
-            assignedStaffChange: body.assignedStaffName || null,
-            archived: body.archived !== undefined ? Boolean(body.archived) : null,
-          },
-          timestamp: FieldValue.serverTimestamp(),
-        });
-      }
+      const logId = `audit_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+      await db.collection("adminAuditLogs").doc(logId).set({
+        action: "CASE_UPDATED",
+        targetType: "case",
+        targetId: caseId.trim(),
+        actorUid: uid,
+        actorRole: role,
+        orgId: currentCase.orgId,
+        details: { status, priority, assignedStaffId, assignedStaffName },
+        timestamp: FieldValue.serverTimestamp(),
+      });
 
-      return sendJson(res, 200, { ok: true, caseId: caseId.trim(), updates });
+      return sendJson(res, 200, {
+        ok: true,
+        case: {
+          id: caseId.trim(),
+          ...currentCase,
+          ...updates,
+          updatedAt: Date.now(),
+        },
+      });
     } catch {
       return sendJson(res, 500, { ok: false, error: "Failed to update case record" });
     }

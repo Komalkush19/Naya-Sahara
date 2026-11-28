@@ -177,10 +177,9 @@ function makeDb(docs = {}, overrides = {}) {
 // ─── Import handlers ───────────────────────────────────────────────────────────
 
 const { handleOrgStaff } = await import("../frontend/api/org/staff.js");
-const { handleAdminOrganizations } = await import("../frontend/api/admin/organizations.js");
+const { handleAdminOrganizations } = await import("../frontend/api/admin/index.js");
 const { handleIssueHandoverCode } = await import("../frontend/api/ngo/issue-handover-code.js");
-const { handleApplyOrganization } = await import("../frontend/api/org/apply.js");
-const { handleListPublicOrganizations } = await import("../frontend/api/org/list-public.js");
+const { handleApplyOrganization, handleListPublicOrganizations } = await import("../frontend/api/org/index.js");
 
 // ─── Test runner ───────────────────────────────────────────────────────────────
 

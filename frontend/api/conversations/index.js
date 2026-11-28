@@ -1,23 +1,14 @@
 /**
- * /api/conversations — Conversation request and management endpoint.
+ * /api/conversations — Unified Conversation and Real-Time Messaging endpoint.
  *
- * GET  /api/conversations               — List conversations for the authenticated user.
- *                                         - NGO staff: returns all conversations where orgId == staff.orgId.
- *                                         - Member: returns conversations where memberId is in participantIds (or requesterId/recipientId).
- *                                         - Platform Admin: denied (SEC: zero central reading of private chats).
- * POST /api/conversations               — Initiate a conversation request.
- *                                         - Validates role (member or ngo_admin).
- *                                         - Prohibits NGO-to-NGO.
- *                                         - Prohibits self-requests.
- *                                         - Checks for existing active/pending requests between participants.
- *                                         - If member requesting NGO, verifies member is associated with that verified NGO.
- *                                         - Creates conversation with status: 'pending', blocked: false.
- *                                         - Supports initial introductory message if provided.
- * PUT  /api/conversations               — Update conversation status or safety flags.
- *                                         - Action 'accept' / 'decline': Only intended recipient can accept or decline a pending request.
- *                                         - Action 'cancel': Only original requester can cancel a pending request.
- *                                         - Action 'block' / 'unblock': Any participant can block/unblock.
- *                                         - Action 'report': Participant can submit a safety report.
+ * Routes handled:
+ *   /api/conversations:
+ *     GET  /api/conversations               — List conversations for caller.
+ *     POST /api/conversations               — Initiate conversation request.
+ *     PUT  /api/conversations               — Update conversation status/safety flags.
+ *   /api/conversations/messages:
+ *     GET  /api/conversations/messages?conversationId=... — Retrieve messages for accepted conversation.
+ *     POST /api/conversations/messages                    — Send message in accepted conversation.
  */
 
 import crypto from "node:crypto";
@@ -34,7 +25,173 @@ async function verifyToken(req, auth) {
   }
 }
 
+// ─── Sub-handler for Messages ────────────────────────────────────────────────
+export async function handleMessages(req, res, { db = adminDb, auth = adminAuth } = {}) {
+  const decoded = await verifyToken(req, auth);
+  if (!decoded) {
+    return sendJson(res, 401, { ok: false, error: "Authentication required" });
+  }
+
+  const { role, uid, orgId } = decoded;
+
+  // Platform admin is strictly prohibited from reading or sending messages
+  if (role === "platform_admin") {
+    return sendJson(res, 403, { ok: false, error: "Platform administrators cannot access private user messages" });
+  }
+
+  // ─── GET /api/conversations/messages ───────────────────────────────────────
+  if (req.method === "GET") {
+    const url = new URL(req.url, `http://localhost`);
+    const conversationId = url.searchParams.get("conversationId");
+
+    if (!conversationId) {
+      return sendJson(res, 400, { ok: false, error: "conversationId query parameter is required" });
+    }
+
+    try {
+      const convRef = db.collection("conversations").doc(conversationId);
+      const convSnap = await convRef.get();
+
+      if (!convSnap.exists) {
+        return sendJson(res, 404, { ok: false, error: "Conversation not found" });
+      }
+
+      const conv = convSnap.data();
+      const isParticipant =
+        (conv.participantIds && conv.participantIds.includes(uid)) ||
+        (conv.type === "ngo" && role === "ngo_admin" && orgId && conv.orgId === orgId);
+
+      if (!isParticipant) {
+        return sendJson(res, 403, { ok: false, error: "You are not a participant in this conversation" });
+      }
+
+      // Security check: Messages are only readable if the conversation is accepted
+      if (conv.requestStatus !== "accepted") {
+        return sendJson(res, 403, {
+          ok: false,
+          error: "Messages are not available until the conversation request has been accepted",
+        });
+      }
+
+      const messagesSnap = await convRef.collection("messages")
+        .orderBy("createdAt", "asc")
+        .get();
+
+      const messages = messagesSnap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      return sendJson(res, 200, { ok: true, messages });
+    } catch (err) {
+      console.error("[api/conversations/messages GET]", err);
+      return sendJson(res, 500, { ok: false, error: "Failed to fetch messages" });
+    }
+  }
+
+  // ─── POST /api/conversations/messages ──────────────────────────────────────
+  if (req.method === "POST") {
+    const body = await parseJsonBody(req);
+    if (!body || !body.conversationId || !body.text) {
+      return sendJson(res, 400, { ok: false, error: "conversationId and text are required" });
+    }
+
+    const { conversationId, text } = body;
+    const trimmedText = String(text).trim();
+
+    if (!trimmedText) {
+      return sendJson(res, 400, { ok: false, error: "Message text cannot be empty" });
+    }
+
+    try {
+      const convRef = db.collection("conversations").doc(conversationId);
+      const convSnap = await convRef.get();
+
+      if (!convSnap.exists) {
+        return sendJson(res, 404, { ok: false, error: "Conversation not found" });
+      }
+
+      const conv = convSnap.data();
+      const isParticipant =
+        (conv.participantIds && conv.participantIds.includes(uid)) ||
+        (conv.type === "ngo" && role === "ngo_admin" && orgId && conv.orgId === orgId);
+
+      if (!isParticipant) {
+        return sendJson(res, 403, { ok: false, error: "You are not a participant in this conversation" });
+      }
+
+      // Must be accepted
+      if (conv.requestStatus !== "accepted") {
+        return sendJson(res, 403, {
+          ok: false,
+          error: "Cannot send messages in a non-accepted conversation",
+        });
+      }
+
+      // Cannot be blocked
+      if (conv.blocked) {
+        return sendJson(res, 403, {
+          ok: false,
+          error: "Cannot send messages in a blocked conversation",
+        });
+      }
+
+      // Resolve author name and role
+      let authorName = "User";
+      let authorRole = "member";
+
+      if (role === "ngo_admin") {
+        authorRole = "org";
+        const orgDoc = await db.collection("organizations").doc(orgId).get();
+        authorName = orgDoc.exists ? (orgDoc.data().name || "NGO Caseworker") : "NGO Caseworker";
+      } else {
+        const memberDoc = await db.collection("members").doc(uid).get();
+        authorName = memberDoc.exists ? (memberDoc.data().nickname || "Member") : "Member";
+      }
+
+      const now = new Date().toISOString();
+      const messageId = `msg_${crypto.randomUUID()}`;
+
+      const messageDoc = {
+        authorId: role === "ngo_admin" ? orgId : uid,
+        senderUid: uid,
+        authorRole,
+        authorName,
+        text: trimmedText,
+        createdAt: now,
+        time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      };
+
+      await convRef.collection("messages").doc(messageId).set(messageDoc);
+
+      // Update parent conversation last message preview
+      await convRef.update({
+        lastMessageText: trimmedText,
+        lastMessageTime: now,
+        updatedAt: now,
+      });
+
+      return sendJson(res, 201, {
+        ok: true,
+        message: { id: messageId, ...messageDoc },
+      });
+    } catch (err) {
+      console.error("[api/conversations/messages POST]", err);
+      return sendJson(res, 500, { ok: false, error: "Failed to send message" });
+    }
+  }
+
+  return sendJson(res, 405, { ok: false, error: "Method not allowed" });
+}
+
+// ─── Sub-handler for Conversations ───────────────────────────────────────────
 export async function handleConversations(req, res, { db = adminDb, auth = adminAuth } = {}) {
+  // Check if routed for messages
+  const url = new URL(req.url, `http://localhost`);
+  if (url.pathname.includes("/messages") || url.searchParams.get("sub") === "messages") {
+    return handleMessages(req, res, { db, auth });
+  }
+
   const decoded = await verifyToken(req, auth);
   if (!decoded) {
     return sendJson(res, 401, { ok: false, error: "Authentication required" });
@@ -242,10 +399,6 @@ export async function handleConversations(req, res, { db = adminDb, auth = admin
 
       await db.collection("conversations").doc(convId).set(convDoc);
 
-      // If introMessage is provided, add it as first message in subcollection if status is accepted?
-      // Notice: In request-gated chat, messages subcollection is only readable once accepted.
-      // We store introMessage on conversation metadata for request review preview.
-
       return sendJson(res, 201, {
         ok: true,
         conversation: { id: convId, ...convDoc },
@@ -292,7 +445,6 @@ export async function handleConversations(req, res, { db = adminDb, auth = admin
       const now = new Date().toISOString();
 
       if (action === "accept") {
-        // SEC-1: Intended recipient ONLY can accept. Requesters cannot self-accept.
         if (!isIntendedRecipient || isRequester) {
           return sendJson(res, 403, { ok: false, error: "Only the intended recipient can accept this conversation request" });
         }
@@ -310,7 +462,6 @@ export async function handleConversations(req, res, { db = adminDb, auth = admin
       }
 
       if (action === "decline") {
-        // Only intended recipient can decline
         if (!isIntendedRecipient || isRequester) {
           return sendJson(res, 403, { ok: false, error: "Only the intended recipient can decline this conversation request" });
         }
@@ -328,7 +479,6 @@ export async function handleConversations(req, res, { db = adminDb, auth = admin
       }
 
       if (action === "cancel") {
-        // Only the requester can cancel their pending request
         if (!isRequester) {
           return sendJson(res, 403, { ok: false, error: "Only the original requester can cancel a pending request" });
         }
@@ -345,7 +495,6 @@ export async function handleConversations(req, res, { db = adminDb, auth = admin
       }
 
       if (action === "block") {
-        // Any participant can block
         await convRef.update({
           blocked: true,
           blockedByUid: uid,
@@ -356,7 +505,6 @@ export async function handleConversations(req, res, { db = adminDb, auth = admin
       }
 
       if (action === "unblock") {
-        // Only participant can unblock
         await convRef.update({
           blocked: false,
           blockedByUid: null,
@@ -370,7 +518,6 @@ export async function handleConversations(req, res, { db = adminDb, auth = admin
         const reportReason = typeof reason === "string" && reason.trim() ? reason.trim() : "Flagged for safety review";
         const reportId = `rep_${crypto.randomUUID()}`;
 
-        // Save into root reports collection
         await db.collection("reports").doc(reportId).set({
           conversationId,
           reportingUserId: uid,
@@ -380,7 +527,6 @@ export async function handleConversations(req, res, { db = adminDb, auth = admin
           createdAt: now,
         });
 
-        // Mark conversation as reported
         await convRef.update({
           reported: true,
           updatedAt: now,
@@ -400,5 +546,9 @@ export async function handleConversations(req, res, { db = adminDb, auth = admin
 }
 
 export default async function handler(req, res) {
+  const url = new URL(req.url, "http://localhost");
+  if (url.pathname.includes("/messages") || url.searchParams.get("sub") === "messages") {
+    return handleMessages(req, res);
+  }
   return handleConversations(req, res);
 }

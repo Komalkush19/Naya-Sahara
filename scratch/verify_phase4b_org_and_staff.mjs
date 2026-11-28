@@ -228,9 +228,8 @@ function bearerReq(method, token, body = null) {
 // Import handlers
 // ═══════════════════════════════════════════════════════════════
 
-import { handleApplyOrganization } from '../frontend/api/org/apply.js'
-import { handleListPublicOrganizations } from '../frontend/api/org/list-public.js'
-import { handleAdminOrganizations } from '../frontend/api/admin/organizations.js'
+import { handleApplyOrganization, handleListPublicOrganizations } from '../frontend/api/org/index.js'
+import { handleAdminOrganizations } from '../frontend/api/admin/index.js'
 import { handleOrgStaff } from '../frontend/api/org/staff.js'
 
 // ═══════════════════════════════════════════════════════════════

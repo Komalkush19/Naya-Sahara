@@ -1,16 +1,9 @@
 /**
- * /api/admin/notices — Platform Administrator notice moderation endpoint.
+ * /api/admin — Unified Platform Administrator Moderation and Management endpoint.
  *
- * GET  /api/admin/notices               — List all notices (all statuses, all orgs)
- * POST /api/admin/notices               — Execute moderation action on a notice
- *
- * Actions: approve, reject, publish, unpublish, archive, restore, delete, create_gov
- *
- * Security:
- *  - All endpoints require a verified platform_admin token.
- *  - All moderation actions are logged to adminAuditLogs.
- *  - Admin cannot approve/reject notices on behalf of an NGO (self-moderation is irrelevant
- *    since admins do not own org notices).
+ * Routes handled:
+ *   /api/admin/notices       — Notice moderation and government notice creation.
+ *   /api/admin/organizations — Organization approval, rejection, archiving, and restoration.
  */
 
 import crypto from "node:crypto";
@@ -46,8 +39,11 @@ async function verifyPlatformAdmin(req, auth, db) {
     return { authorized: false, error: "Administrator profile not found", statusCode: 403 };
   }
   const staffData = staffSnap.data();
-  if (staffData.status !== "active" || staffData.role !== "platform_admin") {
+  if (staffData.status !== "active") {
     return { authorized: false, error: "Administrator account is inactive or suspended", statusCode: 403 };
+  }
+  if (staffData.role !== "platform_admin") {
+    return { authorized: false, error: "Administrator profile does not have platform_admin role", statusCode: 403 };
   }
 
   return { authorized: true, adminUid: decoded.uid };
@@ -129,6 +125,7 @@ function docToAdminNotice(doc) {
   };
 }
 
+// ─── Sub-handler for Admin Notices ───────────────────────────────────────────
 export async function handleAdminNotices(req, res, { db = adminDb, auth = adminAuth } = {}) {
   const authResult = await verifyPlatformAdmin(req, auth, db);
   if (!authResult.authorized) {
@@ -136,14 +133,13 @@ export async function handleAdminNotices(req, res, { db = adminDb, auth = adminA
   }
   const { adminUid } = authResult;
 
-  // ─── GET — List all notices across all statuses ─────────────────────────
+  // GET — List all notices across all statuses
   if (req.method === "GET") {
     try {
       const snap = await db.collection("notices").orderBy("createdAt", "desc").get();
       const notices = snap.docs.map((doc) => docToAdminNotice(doc));
       return sendJson(res, 200, { ok: true, notices });
     } catch {
-      // Fallback without orderBy if index not set
       try {
         const snap = await db.collection("notices").get();
         const notices = snap.docs
@@ -156,7 +152,7 @@ export async function handleAdminNotices(req, res, { db = adminDb, auth = adminA
     }
   }
 
-  // ─── POST — Moderation actions + government notice creation ─────────────
+  // POST — Moderation actions + government notice creation
   if (req.method === "POST") {
     const body = await parseJsonBody(req);
     if (!body) return sendJson(res, 400, { ok: false, error: "Invalid JSON payload" });
@@ -167,7 +163,7 @@ export async function handleAdminNotices(req, res, { db = adminDb, auth = adminA
       return sendJson(res, 400, { ok: false, error: `action must be one of: ${ALLOWED_ACTIONS.join(", ")}` });
     }
 
-    // ── Create government notice ──────────────────────────────────────────
+    // Create government notice
     if (action === "create_gov") {
       const { asDraft } = body;
       const fields = sanitizeGovNoticeInput(body);
@@ -200,7 +196,6 @@ export async function handleAdminNotices(req, res, { db = adminDb, auth = adminA
       try {
         await db.collection("notices").doc(noticeId).set(doc);
 
-        // Audit log
         const logId = `log_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
         await db.collection("adminAuditLogs").doc(logId).set({
           logId,
@@ -219,7 +214,7 @@ export async function handleAdminNotices(req, res, { db = adminDb, auth = adminA
       }
     }
 
-    // ── Update government notice ──────────────────────────────────────────
+    // Update government notice
     if (action === "update_gov") {
       const { noticeId, asDraft } = body;
       if (!noticeId) return sendJson(res, 400, { ok: false, error: "noticeId is required" });
@@ -258,7 +253,7 @@ export async function handleAdminNotices(req, res, { db = adminDb, auth = adminA
       }
     }
 
-    // ── All other actions require a noticeId ──────────────────────────────
+    // Other notice actions
     const { noticeId, rejectionReason } = body;
     if (!noticeId || typeof noticeId !== "string") {
       return sendJson(res, 400, { ok: false, error: "noticeId is required" });
@@ -323,7 +318,6 @@ export async function handleAdminNotices(req, res, { db = adminDb, auth = adminA
         break;
 
       case "publish":
-        // Can only publish approved notices
         if (existing.reviewStatus !== "approved") {
           return sendJson(res, 400, { ok: false, error: "Only approved notices can be published" });
         }
@@ -355,7 +349,6 @@ export async function handleAdminNotices(req, res, { db = adminDb, auth = adminA
         break;
 
       case "restore":
-        // Restore returns to unpublished/approved — never auto-publishes
         updatePayload = {
           ...updatePayload,
           publicationStatus: "unpublished",
@@ -414,6 +407,270 @@ export async function handleAdminNotices(req, res, { db = adminDb, auth = adminA
   return sendJson(res, 405, { ok: false, error: "Method Not Allowed" });
 }
 
+// ─── Sub-handler for Admin Organizations ─────────────────────────────────────
+export async function handleAdminOrganizations(
+  req,
+  res,
+  { db = adminDb, auth = adminAuth } = {}
+) {
+  const authResult = await verifyPlatformAdmin(req, auth, db);
+  if (!authResult.authorized) {
+    return sendJson(res, authResult.statusCode || 403, {
+      ok: false,
+      error: authResult.error,
+    });
+  }
+  const { adminUid } = authResult;
+
+  // GET: List all organizations across all statuses
+  if (req.method === "GET") {
+    try {
+      const snap = await db.collection("organizations").get();
+      const organizations = snap.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          name: data.name || "",
+          location: data.location || "",
+          category: data.category || "General Support",
+          focus: data.focus || "",
+          contactPhone: data.contactPhone || "",
+          contactEmail: data.contactEmail || "",
+          applicantName: data.applicantName || "",
+          applicantEmail: data.applicantEmail || "",
+          applicantUid: data.applicantUid || null,
+          verificationStatus: data.verificationStatus || "pending",
+          status: data.status || "pending",
+          rejectionReason: data.rejectionReason || null,
+          reviewedBy: data.reviewedBy || null,
+          reviewedAt: data.reviewedAt || null,
+          caseworkerCount: data.caseworkerCount || 1,
+          associatedCount: data.associatedCount || 0,
+          logoUrl: data.logoUrl || null,
+          createdAt: data.createdAt || null,
+          updatedAt: data.updatedAt || null,
+        };
+      });
+
+      organizations.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis
+          ? a.createdAt.toMillis()
+          : new Date(a.createdAt || 0).getTime();
+        const timeB = b.createdAt?.toMillis
+          ? b.createdAt.toMillis()
+          : new Date(b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+
+      return sendJson(res, 200, { ok: true, organizations });
+    } catch {
+      return sendJson(res, 500, {
+        ok: false,
+        error: "Failed to retrieve administrative organization directory",
+      });
+    }
+  }
+
+  // POST: Execute lifecycle transition
+  if (req.method === "POST") {
+    const body = await parseJsonBody(req);
+    if (!body) {
+      return sendJson(res, 400, { ok: false, error: "Invalid JSON payload" });
+    }
+
+    const { orgId, action, rejectionReason } = body;
+
+    if (!orgId || typeof orgId !== "string" || !orgId.trim()) {
+      return sendJson(res, 400, {
+        ok: false,
+        error: "Organization ID is required",
+      });
+    }
+
+    const allowedActions = ["approve", "reject", "archive", "restore"];
+    if (!action || !allowedActions.includes(action)) {
+      return sendJson(res, 400, {
+        ok: false,
+        error: `Action must be one of: ${allowedActions.join(", ")}`,
+      });
+    }
+
+    if (action === "reject") {
+      if (
+        !rejectionReason ||
+        typeof rejectionReason !== "string" ||
+        rejectionReason.trim().length < 5
+      ) {
+        return sendJson(res, 400, {
+          ok: false,
+          error: "A mandatory rejection reason of at least 5 characters is required",
+        });
+      }
+    }
+
+    const targetOrgId = orgId.trim();
+    const orgRef = db.collection("organizations").doc(targetOrgId);
+    const orgSnap = await orgRef.get();
+
+    if (!orgSnap.exists) {
+      return sendJson(res, 404, {
+        ok: false,
+        error: "Organization not found",
+      });
+    }
+
+    const orgData = orgSnap.data();
+    const now = FieldValue.serverTimestamp();
+    const batch = db.batch();
+    const logId = `log_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+
+    let updatedVerificationStatus;
+    let updatedStatus;
+    let auditAction;
+    let auditDetails = { orgName: orgData.name };
+
+    if (action === "approve") {
+      updatedVerificationStatus = "verified";
+      updatedStatus = "approved";
+      auditAction = "ORG_APPROVED";
+
+      batch.update(orgRef, {
+        verificationStatus: updatedVerificationStatus,
+        status: updatedStatus,
+        reviewedBy: adminUid,
+        reviewedAt: now,
+        updatedAt: now,
+        rejectionReason: null,
+      });
+
+      const staffQuerySnap = await db
+        .collection("staffProfiles")
+        .where("orgId", "==", targetOrgId)
+        .where("status", "==", "pending_verification")
+        .get();
+
+      for (const staffDoc of staffQuerySnap.docs) {
+        batch.update(staffDoc.ref, {
+          status: "active",
+          updatedAt: now,
+        });
+      }
+
+      const auditRef = db.collection("adminAuditLogs").doc(logId);
+      batch.set(auditRef, {
+        logId,
+        action: auditAction,
+        targetType: "organization",
+        targetId: targetOrgId,
+        actorUid: adminUid,
+        actorRole: "platform_admin",
+        details: auditDetails,
+        timestamp: now,
+      });
+
+      await batch.commit();
+
+      for (const staffDoc of staffQuerySnap.docs) {
+        try {
+          await auth.setCustomUserClaims(staffDoc.id, {
+            role: "ngo_admin",
+            orgId: targetOrgId,
+          });
+        } catch {
+          // Re-sync available on login
+        }
+      }
+
+      return sendJson(res, 200, {
+        ok: true,
+        orgId: targetOrgId,
+        verificationStatus: updatedVerificationStatus,
+        status: updatedStatus,
+        message: `Organization successfully transitioned to ${updatedStatus}`,
+      });
+    } else if (action === "reject") {
+      updatedVerificationStatus = "rejected";
+      updatedStatus = "rejected";
+      auditAction = "ORG_REJECTED";
+      auditDetails.rejectionReason = rejectionReason.trim();
+
+      batch.update(orgRef, {
+        verificationStatus: updatedVerificationStatus,
+        status: updatedStatus,
+        rejectionReason: rejectionReason.trim(),
+        reviewedBy: adminUid,
+        reviewedAt: now,
+        updatedAt: now,
+      });
+
+      const staffQuerySnap = await db
+        .collection("staffProfiles")
+        .where("orgId", "==", targetOrgId)
+        .where("status", "==", "pending_verification")
+        .get();
+
+      for (const staffDoc of staffQuerySnap.docs) {
+        batch.update(staffDoc.ref, {
+          status: "rejected",
+          updatedAt: now,
+        });
+      }
+    } else if (action === "archive") {
+      updatedVerificationStatus = "archived";
+      updatedStatus = "archived";
+      auditAction = "ORG_ARCHIVED";
+
+      batch.update(orgRef, {
+        verificationStatus: updatedVerificationStatus,
+        status: updatedStatus,
+        updatedAt: now,
+      });
+    } else if (action === "restore") {
+      updatedVerificationStatus = "verified";
+      updatedStatus = "approved";
+      auditAction = "ORG_RESTORED";
+
+      batch.update(orgRef, {
+        verificationStatus: updatedVerificationStatus,
+        status: updatedStatus,
+        updatedAt: now,
+      });
+    }
+
+    const auditRef = db.collection("adminAuditLogs").doc(logId);
+    batch.set(auditRef, {
+      logId,
+      action: auditAction,
+      targetType: "organization",
+      targetId: targetOrgId,
+      actorUid: adminUid,
+      actorRole: "platform_admin",
+      details: auditDetails,
+      timestamp: now,
+    });
+
+    await batch.commit();
+
+    return sendJson(res, 200, {
+      ok: true,
+      orgId: targetOrgId,
+      verificationStatus: updatedVerificationStatus,
+      status: updatedStatus,
+      message: `Organization successfully transitioned to ${updatedStatus}`,
+    });
+  }
+
+  res.setHeader("Allow", "GET, POST");
+  return sendJson(res, 405, { ok: false, error: "Method Not Allowed" });
+}
+
 export default async function handler(req, res) {
-  return handleAdminNotices(req, res);
+  const url = new URL(req.url, "http://localhost");
+  if (url.pathname.includes("/notices") || url.searchParams.get("resource") === "notices") {
+    return handleAdminNotices(req, res);
+  }
+  if (url.pathname.includes("/organizations") || url.searchParams.get("resource") === "organizations") {
+    return handleAdminOrganizations(req, res);
+  }
+  return sendJson(res, 404, { ok: false, error: "Admin resource not found" });
 }

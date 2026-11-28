@@ -17,7 +17,7 @@
 
 import assert from 'node:assert/strict';
 import { handleNotices } from '../frontend/api/notices/index.js';
-import { handleAdminNotices } from '../frontend/api/admin/notices.js';
+import { handleAdminNotices } from '../frontend/api/admin/index.js';
 
 // ── Mock Firestore & Auth ───────────────────────────────────────────────
 

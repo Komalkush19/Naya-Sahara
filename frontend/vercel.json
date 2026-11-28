@@ -2,5 +2,13 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "devCommand": "vite --port $PORT --bypass-lock"
+  "devCommand": "vite --port $PORT --bypass-lock",
+  "rewrites": [
+    { "source": "/api/cases/notes", "destination": "/api/cases?sub=notes" },
+    { "source": "/api/conversations/messages", "destination": "/api/conversations?sub=messages" },
+    { "source": "/api/org/apply", "destination": "/api/org?action=apply" },
+    { "source": "/api/org/list-public", "destination": "/api/org?action=list-public" },
+    { "source": "/api/admin/notices", "destination": "/api/admin?resource=notices" },
+    { "source": "/api/admin/organizations", "destination": "/api/admin?resource=organizations" }
+  ]
 }

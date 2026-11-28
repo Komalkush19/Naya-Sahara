@@ -19,8 +19,7 @@
  * 15. Safety report creation on flagged conversation
  */
 
-import { handleConversations } from "../frontend/api/conversations/index.js";
-import { handleMessages } from "../frontend/api/conversations/messages.js";
+import { handleConversations, handleMessages } from "../frontend/api/conversations/index.js";
 
 // In-memory Mock Firestore implementation
 class MockDocRef {

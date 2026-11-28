@@ -15,8 +15,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { handleCases } from '../frontend/api/cases/index.js';
-import { handleCaseNotes } from '../frontend/api/cases/notes.js';
+import { handleCases, handleCaseNotes } from '../frontend/api/cases/index.js';
 
 // ── Mock Firestore & Auth ───────────────────────────────────────────────
 

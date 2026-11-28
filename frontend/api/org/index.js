@@ -1,3 +1,11 @@
+/**
+ * /api/org — Unified Organization Registration and Public Directory endpoint.
+ *
+ * Routes handled:
+ *   GET  /api/org or /api/org/list-public — Public directory of verified organizations.
+ *   POST /api/org or /api/org/apply       — Unauthenticated organization application.
+ */
+
 import crypto from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "../_lib/firebaseAdmin.js";
@@ -10,36 +18,65 @@ import {
   validatePassword,
 } from "../_lib/authUtils.js";
 
-/**
- * Validates email format with a standard RFC-compliant regex.
- *
- * @param {string} email
- * @returns {boolean}
- */
 function isValidEmail(email) {
   if (typeof email !== "string") return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
 /**
+ * Public directory endpoint for verified organizations.
+ * Returns only organizations with verificationStatus == 'verified'.
+ */
+export async function handleListPublicOrganizations(
+  req,
+  res,
+  { db = adminDb } = {}
+) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return sendJson(res, 405, { ok: false, error: "Method Not Allowed" });
+  }
+
+  try {
+    const snap = await db
+      .collection("organizations")
+      .where("verificationStatus", "==", "verified")
+      .get();
+
+    const organizations = snap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: data.name || "",
+        location: data.location || "",
+        category: data.category || "General Support",
+        focus: data.focus || "",
+        contactPhone: data.contactPhone || "",
+        contactEmail: data.contactEmail || "",
+        logoUrl: data.logoUrl || null,
+        caseworkerCount: data.caseworkerCount || 1,
+        associatedCount: data.associatedCount || 0,
+        verificationStatus: data.verificationStatus || "verified",
+        status: data.status || "approved",
+      };
+    });
+
+    return sendJson(res, 200, {
+      ok: true,
+      organizations,
+    });
+  } catch {
+    return sendJson(res, 500, {
+      ok: false,
+      error: "Failed to retrieve verified organization directory",
+    });
+  }
+}
+
+/**
  * Endpoint for submitting an organization registration application.
  * Unauthenticated / public submission that creates a pending organization,
  * provisions a pending admin account, and records an administrative audit log.
- *
- * F-3 Remediation: Concurrent duplicate name/email applications are prevented by a
- * Firestore transaction that atomically checks and reserves the normalized name before
- * any Firebase Auth user is created. If two concurrent requests arrive with the same
- * normalizedName, only one transaction will succeed; the other will find the reservation
- * document already exists and return 409 immediately.
- *
- * Reservation TTL: 15 minutes. If the application write fails after reservation, the
- * reservation document is deleted so the name becomes available again (cleanup in catch).
- *
- * @param {import("http").IncomingMessage} req
- * @param {import("http").ServerResponse} res
- * @param {object} [deps]
- * @param {object} [deps.db]
- * @param {object} [deps.auth]
  */
 export async function handleApplyOrganization(
   req,
@@ -124,14 +161,7 @@ export async function handleApplyOrganization(
   const effectivePhone = (contactPhone || "").trim();
   const effectiveCategory = (category || "General Support").trim();
 
-  // 3. F-3 Remediation: Atomically reserve the normalized org name inside a Firestore
-  //    transaction. This closes the race window where two concurrent requests both pass
-  //    a non-atomic query check and both proceed to create Auth users.
-  //
-  //    The reservation sentinel lives at orgNameReservations/{normalizedName}.
-  //    It is created here and deleted on error, or deleted atomically in the final batch
-  //    commit alongside the org document write.
-  //    Stale reservations (> 15 min) from crashed requests are also reclaimed here.
+  // 3. F-3 Remediation: Atomically reserve the normalized org name inside a Firestore transaction.
   const RESERVATION_TTL_MS = 15 * 60 * 1000;
   const reservationRef = db.collection("orgNameReservations").doc(normalizedName);
 
@@ -147,11 +177,9 @@ export async function handleApplyOrganization(
             ? new Date(resData.reservedAt).getTime()
             : 0;
 
-        // Allow reclaim if reservation is older than TTL (crashed prior request)
         if (Date.now() - resCreatedAt < RESERVATION_TTL_MS) {
           throw Object.assign(new Error("NAME_TAKEN"), { code: "NAME_RESERVED" });
         }
-        // Otherwise fall through and overwrite the stale reservation
       }
 
       transaction.set(reservationRef, {
@@ -167,14 +195,13 @@ export async function handleApplyOrganization(
         error: "An organization with this name has already been registered or is pending review",
       });
     }
-    // Unexpected transaction error
     return sendJson(res, 500, {
       ok: false,
       error: "Failed to process organization registration. Please try again.",
     });
   }
 
-  // 4. Post-reservation duplicate checks (now safe behind atomic reservation gate)
+  // 4. Post-reservation duplicate checks
   try {
     const existingNameSnap = await db
       .collection("organizations")
@@ -216,7 +243,6 @@ export async function handleApplyOrganization(
         });
       }
     } catch (authErr) {
-      // auth/user-not-found is expected and valid
       if (authErr.code !== "auth/user-not-found") {
         // ignore other lookup errors and proceed
       }
@@ -245,8 +271,6 @@ export async function handleApplyOrganization(
     }
 
     // 7. Generate organization ID and persist documents (batch)
-    //    F-3: Delete the name reservation atomically in the same batch commit so the name
-    //    transitions from "reserved" to "committed" in one atomic operation.
     const orgId = `org_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
     const now = FieldValue.serverTimestamp();
 
@@ -302,7 +326,6 @@ export async function handleApplyOrganization(
       batch.set(db.collection("organizations").doc(orgId), orgDoc);
       batch.set(db.collection("staffProfiles").doc(userRecord.uid), staffDoc);
       batch.set(db.collection("adminAuditLogs").doc(logId), auditDoc);
-      // F-3: Release name reservation atomically as part of the same committed batch.
       batch.delete(reservationRef);
       await batch.commit();
 
@@ -314,7 +337,6 @@ export async function handleApplyOrganization(
           "Organization application submitted successfully and is pending administrator review.",
       });
     } catch {
-      // Cleanup: delete reservation and created Auth user if Firestore write fails
       await reservationRef.delete().catch(() => {});
       try {
         await auth.deleteUser(userRecord.uid);
@@ -327,7 +349,6 @@ export async function handleApplyOrganization(
       });
     }
   } catch (outerErr) {
-    // Unexpected error after reservation acquired — release reservation
     await reservationRef.delete().catch(() => {});
     return sendJson(res, 500, {
       ok: false,
@@ -337,5 +358,19 @@ export async function handleApplyOrganization(
 }
 
 export default async function handler(req, res) {
-  return handleApplyOrganization(req, res);
+  const url = new URL(req.url, "http://localhost");
+  if (url.pathname.includes("/list-public") || url.searchParams.get("action") === "list-public") {
+    return handleListPublicOrganizations(req, res);
+  }
+  if (url.pathname.includes("/apply") || url.searchParams.get("action") === "apply") {
+    return handleApplyOrganization(req, res);
+  }
+  if (req.method === "GET") {
+    return handleListPublicOrganizations(req, res);
+  }
+  if (req.method === "POST") {
+    return handleApplyOrganization(req, res);
+  }
+  res.setHeader("Allow", "GET, POST");
+  return sendJson(res, 405, { ok: false, error: "Method Not Allowed" });
 }
