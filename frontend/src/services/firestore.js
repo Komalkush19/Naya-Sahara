@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { db } from "../firebase/config";
 import {
   collection,

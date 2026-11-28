@@ -469,7 +469,9 @@ function NoticeDetailModal({ open, onClose, notice, language }) {
               <Badge tone="mint">{tx(language, 'Verified NGO Notice', 'प्रमाणित संस्थागत सूचना')}</Badge>
             )}
             <Badge tone="neutral">{notice.category || 'Public Support'}</Badge>
-            <Badge tone="lavender">{tx(language, 'Demonstration Record', 'नमुना अभिलेख')}</Badge>
+            {notice.isSyntheticDemo && (
+              <Badge tone="lavender">{tx(language, 'Demonstration Record', 'नमुना अभिलेख')}</Badge>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: '6px' }}>
@@ -596,6 +598,8 @@ function readNotice(notice, language) {
 
 export default function NoticesPage({
   notices = [],
+  loading = false,
+  error = '',
   role,
   onCreateNotice,
   onUpdateNotice,
@@ -606,6 +610,7 @@ export default function NoticesPage({
   onArchiveNotice,
   onRestoreNotice,
   onUnpublishNotice,
+  onRetry,
   language,
 }) {
   const [activeTab, setActiveTab] = useState('ngo') // 'ngo' | 'gov'
@@ -879,6 +884,29 @@ export default function NoticesPage({
           </div>
         )}
       </div>
+
+      {/* Error Banner with Retry */}
+      {error && (
+        <div className="notice-inline notice-inline-danger" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="error_outline" />
+            <span>{error}</span>
+          </div>
+          {onRetry && (
+            <Button icon="refresh" onClick={onRetry} size="small" variant="secondary">
+              {tx(language, 'Retry', 'पुन: प्रयास')}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Loading Indicator */}
+      {loading && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '32px 0', color: 'var(--text-muted)' }}>
+          <Icon name="sync" className="spin-icon" />
+          <span>{tx(language, 'Loading notices from server…', 'सर्भरबाट सूचनाहरू लोड हुँदैछ…')}</span>
+        </div>
+      )}
 
       <div className="notice-list">
         {filteredNotices.map((notice) => {

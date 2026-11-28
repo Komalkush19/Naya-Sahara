@@ -64,10 +64,11 @@ export default function MessagesPage({
   currentUserId,
   conversations = [],
   activeConversationId,
-  currentUserName = 'Sajilo',
+  currentUserName = '',
   onSelectConversation,
   onAcceptRequest,
   onDeclineRequest,
+  onCancelRequest,
   onSendMessage,
   onBlock,
   onUnblock,
@@ -339,7 +340,17 @@ export default function MessagesPage({
                           `${counterpart.name} ले तपाईंसँग संवाद गर्न अनुरोध पठाउनुभएको छ। कुराकानी सुरु गर्न स्वीकार गर्नुहोस्।`,
                         )}
                   </p>
-                  {!isRequester && (
+                  {isRequester ? (
+                    <div className="request-actions">
+                      <Button
+                        icon="close"
+                        onClick={() => onCancelRequest?.(currentConv.id)}
+                        variant="secondary"
+                      >
+                        {tx(language, 'Cancel request', 'अनुरोध रद्द गर्नुहोस्')}
+                      </Button>
+                    </div>
+                  ) : (
                     <div className="request-actions">
                       <Button icon="check" onClick={() => onAcceptRequest?.(currentConv.id)}>
                         {tx(language, 'Accept request', 'अनुरोध स्वीकार')}

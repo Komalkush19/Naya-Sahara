@@ -77,35 +77,38 @@ export default function AuthPage({
     setStatusMessage('')
   }
 
-  const handleMemberLogin = (event) => {
+  const handleMemberLogin = async (event) => {
     event.preventDefault()
     setError('')
-    if (loginNickname.trim().length < 2 || loginPassword.length < 6) {
+    if (loginNickname.trim().length < 2 || loginPassword.length < 8) {
       setError(
         tx(
           language,
-          'Enter your nickname and a password of at least 6 characters.',
-          'आफ्नो उपनाम र कम्तीमा ६ अक्षरको पासवर्ड राख्नुहोस्।',
+          'Enter your nickname and a password of at least 8 characters.',
+          'आफ्नो उपनाम र कम्तीमा ८ अक्षरको पासवर्ड राख्नुहोस्।',
         ),
       )
       return
     }
     setSubmitting(true)
-    const result = onMemberLogin({ nickname: loginNickname.trim(), password: loginPassword })
-    setSubmitting(false)
-    if (!result?.ok) {
-      setError(
-        result?.error ||
-          tx(
-            language,
-            'Could not sign in with those demo credentials.',
-            'यी नमुना विवरणबाट लगइन हुन सकेन।',
-          ),
-      )
+    try {
+      const result = await onMemberLogin({ nickname: loginNickname.trim(), password: loginPassword })
+      if (!result?.ok) {
+        setError(
+          result?.error ||
+            tx(
+              language,
+              'Could not sign in with those credentials.',
+              'यी विवरणबाट लगइन हुन सकेन।',
+            ),
+        )
+      }
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const handleMemberRegister = (event) => {
+  const handleMemberRegister = async (event) => {
     event.preventDefault()
     setError('')
     const normalizedCode = handoverCode.trim().toUpperCase()
@@ -129,12 +132,12 @@ export default function AuthPage({
       )
       return
     }
-    if (regPassword.length < 6) {
+    if (regPassword.length < 8) {
       setError(
         tx(
           language,
-          'Password must be at least 6 characters long.',
-          'पासवर्ड कम्तीमा ६ अक्षरको हुनुपर्छ।',
+          'Password must be at least 8 characters long.',
+          'पासवर्ड कम्तीमा ८ अक्षरको हुनुपर्छ।',
         ),
       )
       return
@@ -151,26 +154,29 @@ export default function AuthPage({
     }
 
     setSubmitting(true)
-    const result = onMemberRegister({
-      code: normalizedCode,
-      nickname: regNickname.trim(),
-      password: regPassword,
-      avatarId: selectedAvatarId,
-    })
-    setSubmitting(false)
-    if (!result?.ok) {
-      setError(
-        result?.error ||
-          tx(
-            language,
-            'Handover code could not be verified.',
-            'हस्तान्तरण कोड प्रमाणित हुन सकेन।',
-          ),
-      )
+    try {
+      const result = await onMemberRegister({
+        code: normalizedCode,
+        nickname: regNickname.trim(),
+        password: regPassword,
+        avatarId: selectedAvatarId,
+      })
+      if (!result?.ok) {
+        setError(
+          result?.error ||
+            tx(
+              language,
+              'Handover code could not be verified.',
+              'हस्तान्तरण कोड प्रमाणित हुन सकेन।',
+            ),
+        )
+      }
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const handleStaffLogin = (event) => {
+  const handleStaffLogin = async (event) => {
     event.preventDefault()
     setError('')
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(staffEmail.trim()) || staffPassword.length < 6) {
@@ -184,21 +190,24 @@ export default function AuthPage({
       return
     }
     setSubmitting(true)
-    const result = onStaffLogin({ email: staffEmail.trim(), password: staffPassword })
-    setSubmitting(false)
-    if (!result?.ok) {
-      setError(
-        result?.error ||
-          tx(
-            language,
-            'Use a demo staff email or preview button while Firebase Auth is pending.',
-            'Firebase Auth जडान नभएसम्म नमुना कर्मचारी इमेल वा डेमो बटन प्रयोग गर्नुहोस्।',
-          ),
-      )
+    try {
+      const result = await onStaffLogin({ email: staffEmail.trim(), password: staffPassword })
+      if (!result?.ok) {
+        setError(
+          result?.error ||
+            tx(
+              language,
+              'Staff authentication failed.',
+              'कर्मचारी प्रमाणीकरण असफल भयो।',
+            ),
+        )
+      }
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const handleNgoRegister = (event) => {
+  const handleNgoRegister = async (event) => {
     event.preventDefault()
     setError('')
     if (!ngoName.trim() || !ngoWorkArea.trim() || !ngoPhone.trim() || !ngoDescription.trim()) {
@@ -211,38 +220,53 @@ export default function AuthPage({
       )
       return
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ngoAdminEmail.trim()) || ngoAdminPassword.length < 6) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ngoAdminEmail.trim()) || ngoAdminPassword.length < 8) {
       setError(
         tx(
           language,
-          'Provide a valid staff email and password (min 6 characters).',
-          'मान्य संस्था प्रशासक इमेल र कम्तीमा ६ अक्षरको पासवर्ड राख्नुहोस्।',
+          'Provide a valid staff email and password (min 8 characters).',
+          'मान्य संस्था प्रशासक इमेल र कम्तीमा ८ अक्षरको पासवर्ड राख्नुहोस्।',
         ),
       )
       return
     }
 
-    onNgoRegister({
-      name: ngoName.trim(),
-      location: ngoLocation,
-      category: ngoWorkArea.trim(),
-      focus: ngoDescription.trim(),
-      contactPhone: ngoPhone.trim(),
-      contactEmail: ngoAdminEmail.trim(),
-    })
-    setStatusMessage(
-      tx(
-        language,
-        'Demo NGO application submitted locally. In the connected build, Platform Admin verification is required before staff access.',
-        'नमुना संस्थाको आवेदन स्थानीय रूपमा दर्ता भयो। पूर्ण संस्करणमा पहुँच पाउनुअघि प्लेटफर्म प्रशासकको स्वीकृति आवश्यक हुन्छ।',
-      ),
-    )
-    setNgoName('')
-    setNgoWorkArea('')
-    setNgoPhone('')
-    setNgoDescription('')
-    setNgoAdminEmail('')
-    setNgoAdminPassword('')
+    setSubmitting(true)
+    try {
+      const result = await onNgoRegister({
+        name: ngoName.trim(),
+        location: ngoLocation,
+        category: ngoWorkArea.trim(),
+        focus: ngoDescription.trim(),
+        contactPhone: ngoPhone.trim(),
+        contactEmail: ngoAdminEmail.trim(),
+        applicantName: `${ngoName.trim()} Admin`,
+        applicantPassword: ngoAdminPassword,
+      })
+
+      if (result && !result.ok) {
+        setError(result.error || tx(language, 'Failed to submit NGO application.', 'संस्था आवेदन दर्ता हुन सकेन।'))
+        return
+      }
+
+      setStatusMessage(
+        tx(
+          language,
+          'NGO application submitted successfully. Platform Admin verification is required before staff access is granted.',
+          'संस्थाको आवेदन सफलतापूर्वक दर्ता भयो। कर्मचारी पहुँच पाउनुअघि प्लेटफर्म प्रशासकको स्वीकृति आवश्यक हुन्छ।',
+        ),
+      )
+      setNgoName('')
+      setNgoWorkArea('')
+      setNgoPhone('')
+      setNgoDescription('')
+      setNgoAdminEmail('')
+      setNgoAdminPassword('')
+    } catch (err) {
+      setError(err.message || tx(language, 'Failed to submit NGO application.', 'संस्था आवेदन दर्ता हुन सकेन।'))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -353,8 +377,8 @@ export default function AuthPage({
                     <span>
                       {tx(
                         language,
-                        'Frontend UI validation active. Backend custom-token verification will be connected in the Firebase integration phase.',
-                        'हाल फ्रन्टएन्ड जाँच सक्रिय छ। ब्याकएन्ड कस्टम-टोकन प्रमाणीकरण अर्को चरणमा जोडिनेछ।',
+                        'End-to-end pseudonymous authentication active. Secure custom token verification via backend API.',
+                        'सुरक्षित उपनाम प्रमाणीकरण सक्रिय छ। ब्याकएन्ड कस्टम-टोकन प्रणाली जडान भएको छ।',
                       )}
                     </span>
                   </div>
@@ -401,7 +425,7 @@ export default function AuthPage({
                   <div className="form-row">
                     <PasswordField
                       autoComplete="new-password"
-                      hint={tx(language, 'Minimum 6 characters', 'कम्तीमा ६ अक्षर')}
+                      hint={tx(language, 'Minimum 8 characters', 'कम्तीमा ८ अक्षर')}
                       label={tx(language, 'Create password', 'पासवर्ड बनाउनुहोस्')}
                       onChange={(event) => { setRegPassword(event.target.value); setError('') }}
                       value={regPassword}
@@ -532,45 +556,22 @@ export default function AuthPage({
 
             <aside className="auth-aside">
               <Card className="auth-demo-card">
-                <p className="eyebrow">{tx(language, 'FRONTEND PREVIEW ONLY', 'फ्रन्टएन्ड पूर्वावलोकन मात्र')}</p>
-                <h3>{tx(language, 'Synthetic demo accounts', 'नमुना डेमो खाताहरू')}</h3>
+                <p className="eyebrow">{tx(language, 'REAL AUTHENTICATION ACTIVE', 'वास्तविक प्रमाणीकरण सक्रिय')}</p>
+                <h3>{tx(language, 'Authentication Information', 'प्रमाणीकरण जानकारी')}</h3>
                 <p>
                   {tx(
                     language,
-                    'Before Firebase Authentication is connected in the next phase, use these clearly labelled synthetic preview actions to inspect each authenticated dashboard.',
-                    'अर्को चरणमा Firebase Authentication जडान हुनुअघि यी नमुना पूर्वावलोकन बटनबाट ड्यासबोर्ड हेर्न सकिन्छ।',
+                    'Naya Sahara enforces strict role-based access control. Women register using single-use 72-hour handover codes. Staff authenticate via Firebase Authentication.',
+                    'नयाँ सहाराले भूमिका अनुसार पहुँच नियन्त्रण गर्दछ। महिलाहरूले ७२ घण्टा मान्य कोडबाट दर्ता गर्छन्। कर्मचारीले Firebase मार्फत लगइन गर्छन्।',
                   )}
                 </p>
-                <div className="auth-demo-actions">
-                  <Button
-                    icon="person"
-                    onClick={() => onMemberLogin({ nickname: 'Sajilo', password: 'demo-member-password', preview: true })}
-                    variant="secondary"
-                  >
-                    {tx(language, 'Preview Member (Sajilo)', 'सदस्य पूर्वावलोकन (सजिलो)')}
-                  </Button>
-                  <Button
-                    icon="apartment"
-                    onClick={() => onStaffLogin({ email: 'asha@sathi.example', password: 'demo-staff-password', previewRole: 'org' })}
-                    variant="secondary"
-                  >
-                    {tx(language, 'Preview NGO Dashboard', 'संस्था ड्यासबोर्ड पूर्वावलोकन')}
-                  </Button>
-                  <Button
-                    icon="admin_panel_settings"
-                    onClick={() => onStaffLogin({ email: 'admin@nayasahara.example', password: 'demo-admin-password', previewRole: 'admin' })}
-                    variant="secondary"
-                  >
-                    {tx(language, 'Preview Platform Admin', 'प्लेटफर्म प्रशासक पूर्वावलोकन')}
-                  </Button>
-                </div>
-                <div className="notice-inline notice-inline-warning">
+                <div className="notice-inline notice-inline-info" style={{ marginTop: '1rem' }}>
                   <Icon name="security" />
                   <span>
                     {tx(
                       language,
-                      'Demo shortcuts are for local UI review only and will be replaced by real Firebase Auth & server claims.',
-                      'यी डेमो बटनहरू स्थानीय UI जाँचका लागि मात्र हुन् र वास्तविक Firebase Auth सँग बदलिनेछन्।',
+                      'Client-side bypass and mock roles have been completely removed. Roles and permissions are strictly enforced by the backend API and Cloud Firestore Security Rules.',
+                      'नमुना भूमिका हटाइएको छ। भूमिकाहरू ब्याकएन्ड API र क्लाउड फायरस्टोर सुरक्षा नियमबाट मात्र निर्धारित हुन्छन्।',
                     )}
                   </span>
                 </div>

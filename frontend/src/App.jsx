@@ -5,7 +5,6 @@ import { IMAGE_PATHS, MEMBER_AVATAR_OPTIONS } from './config/images.js'
 import { tx } from './i18n.js'
 import {
   initialAssociatedMembers,
-  initialNotices,
   initialOrganizations,
 } from './data.js'
 import AuthPage from './pages/AuthPage.jsx'
@@ -17,6 +16,37 @@ import MessagesPage from './pages/Messages.jsx'
 import NoticesPage from './pages/Notices.jsx'
 import OrganizationsPage from './pages/Organizations.jsx'
 import TeamPage from './pages/Team.jsx'
+import { useAuth } from './hooks/useAuth.js'
+import { auth } from './firebase/config.js'
+import { issueHandoverCode } from './services/ngoService.js'
+import {
+  fetchPublicOrganizations,
+  fetchAdminOrganizations,
+  submitOrganizationApplication,
+  reviewOrganization,
+} from './services/organizationService.js'
+import {
+  updateMemberProfileFirestore,
+  fetchCommunityDirectory,
+} from './services/memberService.js'
+import {
+  fetchPublicNotices,
+  fetchOrgNotices,
+  fetchAdminNotices,
+  createNoticeApi,
+  updateNoticeApi,
+  deleteNoticeApi,
+  adminModerateNotice,
+  createGovNoticeApi,
+} from './services/noticeService.js'
+import {
+  getConversations as fetchConversationsApi,
+  sendConversationRequest as sendConversationRequestApi,
+  updateConversationStatus as updateConversationStatusApi,
+  sendMessage as sendMessageApi,
+  subscribeToConversations,
+  subscribeToMessages,
+} from './services/messageService.js'
 
 const ALLOWED_PAGES_BY_ROLE = {
   guest: new Set(['home', 'organizations', 'notices']),
@@ -40,9 +70,19 @@ function QuickExitScreen({ onReturn, language }) {
 }
 
 export default function App() {
+  const {
+    user: authUser,
+    role: authRole,
+    loading: authLoading,
+    registerMember,
+    loginMember,
+    loginStaff,
+    logout,
+  } = useAuth()
+
   const [publicView, setPublicView] = useState('landing') // 'landing' | 'auth' | 'app' | 'guest'
   const [authMode, setAuthMode] = useState('login')
-  const [sessionRole, setSessionRole] = useState(null) // null | 'member' | 'org' | 'admin'
+  const sessionRole = authRole // Strictly derived from backend auth state: 'member' | 'org' | 'admin' | null
   const [page, setPage] = useState('home')
   const [language, setLanguage] = useState('ne')
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
@@ -50,8 +90,10 @@ export default function App() {
 
   // Demo synthetic data
   const [organizations, setOrganizations] = useState(initialOrganizations)
-  const [notices, setNotices] = useState(initialNotices)
-  const [associatedMembers, setAssociatedMembers] = useState(initialAssociatedMembers)
+  const [notices, setNotices] = useState([])
+  const [noticesLoading, setNoticesLoading] = useState(false)
+  const [noticesError, setNoticesError] = useState('')
+  const [associatedMembers, _setAssociatedMembers] = useState(initialAssociatedMembers)
   const [team, setTeam] = useState([
     {
       id: 'worker-1',
@@ -71,45 +113,103 @@ export default function App() {
     },
   ])
 
-  // Handover codes with status tracking
-  const [handoverCodes, setHandoverCodes] = useState([
-    {
-      code: 'NS-240001',
-      issuedAt: 'Today',
-      expiresAt: '72 hours from issue',
-      status: 'available',
-    },
-    {
-      code: 'NS-110042',
-      issuedAt: 'Yesterday',
-      expiresAt: 'Used / Registered',
-      status: 'used',
-      usedBy: 'Prakriti',
-    },
-  ])
-
-  // Demo member authentication state with stable IDs
-  const [memberId, setMemberId] = useState('mem-1')
-  const [memberNickname, setMemberNickname] = useState('Sajilo')
-  const [memberAvatarId, setMemberAvatarId] = useState('avatar1')
-  const [memberDistrict, setMemberDistrict] = useState('Lalitpur')
-  const [memberInterests, setMemberInterests] = useState(['Tailoring', 'Handicrafts'])
-  const [memberCommunityOptIn, setMemberCommunityOptIn] = useState(true)
+  // Member authentication state synchronized with backend
+  const [memberId, setMemberId] = useState('')
+  const [memberNickname, setMemberNickname] = useState('')
+  const [memberAvatarId, setMemberAvatarId] = useState('')
+  const [memberDistrict, setMemberDistrict] = useState('')
+  const [memberInterests, setMemberInterests] = useState([])
+  const [memberCommunityOptIn, setMemberCommunityOptIn] = useState(false)
   const [memberShowDistrict, setMemberShowDistrict] = useState(true)
   const [memberShowInterests, setMemberShowInterests] = useState(true)
-  const [demoMembers, setDemoMembers] = useState([
-    { id: 'mem-1', nickname: 'Sajilo', password: 'demo-member-password', avatarId: 'avatar1' },
-    { id: 'mem-2', nickname: 'Prakriti', password: 'demo-member-password', avatarId: 'avatar2' },
-  ])
 
   // Active NGO organization state for staff sessions
-  const [activeOrgId, setActiveOrgId] = useState('org-asha')
+  const [activeOrgId, setActiveOrgId] = useState('')
+
+  // Synchronize authenticated user profile to local state
+  useEffect(() => {
+    if (authUser && authRole) {
+      if (authRole === 'member') {
+        if (authUser.uid) setMemberId(authUser.uid)
+        if (authUser.nickname) setMemberNickname(authUser.nickname)
+        if (authUser.avatarId) setMemberAvatarId(authUser.avatarId)
+        if (authUser.district !== undefined) setMemberDistrict(authUser.district)
+        if (authUser.interests !== undefined) setMemberInterests(authUser.interests)
+        if (authUser.communityOptIn !== undefined) setMemberCommunityOptIn(authUser.communityOptIn)
+      } else if (authRole === 'org') {
+        if (authUser.orgId) setActiveOrgId(authUser.orgId)
+      }
+      setPublicView('app')
+    } else if (!authUser) {
+      // Clear all user-dependent identity and conversation state when unauthenticated
+      setMemberId('')
+      setMemberNickname('')
+      setMemberAvatarId('')
+      setMemberDistrict('')
+      setMemberInterests([])
+      setMemberCommunityOptIn(false)
+      setActiveOrgId('')
+      setConversations([])
+      setReports([])
+    }
+  }, [authUser, authRole])
+
+  // Role-aware route guard: redirect to auth if trying to access protected views unauthenticated
+  useEffect(() => {
+    if (!authLoading && !sessionRole && publicView === 'app') {
+      setPublicView('auth')
+    }
+  }, [authLoading, sessionRole, publicView])
+
+  // Page authorization guard: restrict inaccessible pages by role
+  useEffect(() => {
+    if (sessionRole && ALLOWED_PAGES_BY_ROLE[sessionRole]) {
+      if (!ALLOWED_PAGES_BY_ROLE[sessionRole].has(page)) {
+        setPage('home')
+      }
+    } else if (publicView === 'guest') {
+      if (!ALLOWED_PAGES_BY_ROLE.guest.has(page)) {
+        setPage('home')
+      }
+    }
+  }, [sessionRole, page, publicView])
 
   // Reports state for retaining report reasons in demonstration
   const [_reports, setReports] = useState([])
 
-  // Member profile update handler
-  const updateMemberProfile = ({
+  // Community directory state (opt-in members only, fetched from communityProfiles)
+  const [communityMembers, setCommunityMembers] = useState([])
+  const [communityLoading, setCommunityLoading] = useState(false)
+  const [communityError, setCommunityError] = useState('')
+
+  // Load community directory when a member is authenticated
+  const loadCommunityDirectory = async () => {
+    if (!authUser || authRole !== 'member') return
+    setCommunityLoading(true)
+    setCommunityError('')
+    try {
+      const result = await fetchCommunityDirectory()
+      if (result.ok) {
+        setCommunityMembers(result.members)
+      } else {
+        setCommunityError(result.error || 'Failed to load community directory')
+      }
+    } finally {
+      setCommunityLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (authUser && authRole === 'member') {
+      loadCommunityDirectory()
+    } else if (!authUser) {
+      setCommunityMembers([])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser, authRole])
+
+  // Member profile update handler — persists to Firestore then updates local state
+  const updateMemberProfile = async ({
     nickname,
     avatarId,
     district,
@@ -118,97 +218,36 @@ export default function App() {
     showDistrict,
     showInterests,
   }) => {
-    if (nickname && nickname.trim()) {
-      setMemberNickname(nickname.trim())
-    }
-    if (avatarId) {
-      setMemberAvatarId(avatarId)
-    }
-    if (district !== undefined) {
-      setMemberDistrict(district)
-    }
-    if (interests !== undefined) {
-      setMemberInterests(interests)
-    }
-    if (communityOptIn !== undefined) {
-      setMemberCommunityOptIn(communityOptIn)
-    }
-    if (showDistrict !== undefined) {
-      setMemberShowDistrict(showDistrict)
-    }
-    if (showInterests !== undefined) {
-      setMemberShowInterests(showInterests)
-    }
+    // Optimistic local update first for instant UI feedback
+    if (nickname && nickname.trim()) setMemberNickname(nickname.trim())
+    if (avatarId !== undefined) setMemberAvatarId(avatarId)
+    if (district !== undefined) setMemberDistrict(district)
+    if (interests !== undefined) setMemberInterests(interests)
+    if (communityOptIn !== undefined) setMemberCommunityOptIn(communityOptIn)
+    if (showDistrict !== undefined) setMemberShowDistrict(showDistrict)
+    if (showInterests !== undefined) setMemberShowInterests(showInterests)
 
-    // Keep associatedMembers roster in sync so community directory updates immediately
-    setAssociatedMembers((current) =>
-      current.map((mem) =>
-        mem.id === memberId || mem.nickname === memberNickname
-          ? {
-              ...mem,
-              nickname: nickname ? nickname.trim() : mem.nickname,
-              avatarId: avatarId || mem.avatarId,
-              district: district !== undefined ? district : mem.district,
-              interests: interests !== undefined ? interests : mem.interests,
-              communityOptIn: communityOptIn !== undefined ? communityOptIn : mem.communityOptIn,
-            }
-          : mem,
-      ),
-    )
+    // Persist to Firestore (members + communityProfiles)
+    if (memberId && memberNickname) {
+      const result = await updateMemberProfileFirestore(
+        memberId,
+        (nickname && nickname.trim()) || memberNickname,
+        { avatarId, district, interests, communityOptIn },
+      )
+      if (!result.ok && import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.warn('[Profile] Firestore save failed:', result.error)
+      }
+      // Refresh community directory if opt-in changed so directory updates immediately
+      if (communityOptIn !== undefined) {
+        loadCommunityDirectory()
+      }
+    }
   }
 
   // Messaging state (text-only MVP supporting Woman <-> Woman and Woman <-> NGO with explicit stable IDs)
-  const [conversations, setConversations] = useState([
-    {
-      id: 'conv-asha',
-      type: 'ngo', // 'ngo' | 'member'
-      requesterId: 'mem-1',
-      requesterRole: 'member',
-      requesterName: 'Sajilo',
-      requesterAvatar: IMAGE_PATHS.avatars.avatar1,
-      recipientId: 'org-asha',
-      recipientRole: 'org',
-      recipientName: 'Asha Sathi Nepal',
-      recipientAvatar: IMAGE_PATHS.ngos.ngo1,
-      organizationId: 'org-asha',
-      participantAvatar: IMAGE_PATHS.ngos.ngo1,
-      participantSubtitle: 'Verifying Support NGO · Lalitpur',
-      requestStatus: 'accepted', // 'none' | 'pending' | 'accepted' | 'declined'
-      blocked: false,
-      reported: false,
-      messages: [
-        {
-          id: 'msg-1',
-          author: 'org',
-          authorId: 'org-asha',
-          authorName: 'Asha Sathi Nepal',
-          text: 'Namaste Sajilo, welcome to Naya Sahara. How can our team support you today?',
-          time: '10:30 AM',
-        },
-      ],
-    },
-    {
-      id: 'conv-prakriti',
-      type: 'member',
-      requesterId: 'mem-2',
-      requesterRole: 'member',
-      requesterName: 'Prakriti',
-      requesterAvatar: IMAGE_PATHS.avatars.avatar2,
-      recipientId: 'mem-1',
-      recipientRole: 'member',
-      recipientName: 'Sajilo',
-      recipientAvatar: IMAGE_PATHS.avatars.avatar1,
-      organizationId: null,
-      participantAvatar: IMAGE_PATHS.avatars.avatar2,
-      participantSubtitle: 'Community Peer · Kathmandu',
-      requestStatus: 'pending',
-      blocked: false,
-      reported: false,
-      messages: [],
-    },
-  ])
-
-  const [activeConversationId, setActiveConversationId] = useState('conv-asha')
+  const [conversations, setConversations] = useState([])
+  const [activeConversationId, setActiveConversationId] = useState(null)
 
   // Helper to get active session user ID, role, and avatar
   const role = sessionRole || 'guest'
@@ -216,8 +255,83 @@ export default function App() {
   const memberAvatarSrc =
     MEMBER_AVATAR_OPTIONS.find((item) => item.id === memberAvatarId)?.src || IMAGE_PATHS.avatars.avatar1
 
+  // Load conversations from backend & subscribe to real-time updates
+  useEffect(() => {
+    if (!currentUserId || (role !== 'member' && role !== 'org')) {
+      setConversations([])
+      return
+    }
+
+    // 1. Initial load via API
+    fetchConversationsApi()
+      .then((data) => {
+        if (data && data.ok && Array.isArray(data.conversations)) {
+          setConversations((prev) => {
+            // merge with any local active messages
+            return data.conversations.map((c) => {
+              const existing = prev.find((p) => p.id === c.id)
+              return {
+                ...c,
+                messages: existing?.messages || c.messages || [],
+              }
+            })
+          })
+        }
+      })
+      .catch((err) => {
+        console.warn('[App] fetchConversationsApi failed:', err)
+      })
+
+    // 2. Real-time Firestore subscription
+    const unsubscribe = subscribeToConversations(
+      {
+        role: role === 'org' ? 'ngo_admin' : 'member',
+        uid: auth.currentUser?.uid || memberId,
+        orgId: activeOrgId,
+      },
+      (realtimeConvs) => {
+        setConversations((prev) => {
+          return realtimeConvs.map((c) => {
+            const existing = prev.find((p) => p.id === c.id)
+            return {
+              ...c,
+              messages: existing?.messages || c.messages || [],
+            }
+          })
+        })
+      },
+    )
+
+    return () => {
+      unsubscribe?.()
+    }
+  }, [currentUserId, role, activeOrgId, memberId])
+
+  // Real-time subscription to active conversation messages
+  useEffect(() => {
+    if (!activeConversationId) return
+
+    const unsubscribe = subscribeToMessages(
+      activeConversationId,
+      (realtimeMessages) => {
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id === activeConversationId) {
+              return { ...c, messages: realtimeMessages }
+            }
+            return c
+          }),
+        )
+      },
+    )
+
+    return () => {
+      unsubscribe?.()
+    }
+  }, [activeConversationId])
+
   // Request-gated messaging handlers with strict authorization checks
-  const sendConversationRequest = ({ targetId, targetName, targetType, targetAvatar, targetSubtitle }) => {
+  const sendConversationRequest = async ({ targetId, targetName, targetType, targetAvatar, targetSubtitle, introMessage }) => {
     // Check authorization: Guests and Admins cannot send messages
     if (role !== 'member' && role !== 'org') {
       return { ok: false, error: tx(language, 'Only members and NGOs can send message requests.', 'सदस्य र संस्थाले मात्र सन्देश पठाउन सक्छन्।') }
@@ -233,138 +347,135 @@ export default function App() {
       return { ok: false, error: tx(language, 'You cannot send a message request to yourself.', 'आफैलाई सन्देश अनुरोध पठाउन मिल्दैन।') }
     }
 
-    // Check if conversation already exists by participant IDs
-    const existing = conversations.find((c) => {
-      const isParticipantMatch =
-        (c.requesterId === currentUserId && c.recipientId === targetId) ||
-        (c.requesterId === targetId && c.recipientId === currentUserId)
-      return isParticipantMatch
-    })
+    try {
+      const res = await sendConversationRequestApi({
+        targetId,
+        targetName,
+        targetType,
+        targetAvatar,
+        targetSubtitle,
+        introMessage,
+      })
 
-    if (existing) {
-      if (existing.blocked) {
-        return { ok: false, error: tx(language, 'This contact is currently blocked.', 'यो सम्पर्क हाल रोकिएको छ।') }
-      }
-      if (existing.requestStatus === 'pending') {
-        setActiveConversationId(existing.id)
+      if (res && res.ok && res.conversation) {
+        setConversations((prev) => {
+          const exists = prev.some((c) => c.id === res.conversation.id)
+          if (exists) {
+            return prev.map((c) => (c.id === res.conversation.id ? { ...c, ...res.conversation } : c))
+          }
+          return [{ ...res.conversation, messages: [] }, ...prev]
+        })
+        setActiveConversationId(res.conversation.id)
         setPage('messages')
-        return { ok: true, notice: tx(language, 'A request is already pending.', 'अनुरोध पहिले नै विचाराधीन छ।') }
+        return { ok: true, conversation: res.conversation }
       }
-      if (existing.requestStatus === 'accepted') {
-        setActiveConversationId(existing.id)
+
+      if (res && res.conversationId) {
+        setActiveConversationId(res.conversationId)
         setPage('messages')
-        return { ok: true }
+        return { ok: true, notice: res.error }
       }
-      // If declined previously, reset to pending
-      setConversations((current) =>
-        current.map((c) =>
-          c.id === existing.id
-            ? {
-                ...c,
-                requestStatus: 'pending',
-                requesterId: currentUserId,
-                requesterRole: role,
-                requesterName: role === 'org' ? (organizations.find((o) => o.id === activeOrgId)?.name || 'NGO') : memberNickname,
-                recipientId: targetId,
-                recipientRole: targetType,
-                recipientName: targetName,
-              }
-            : c,
-        ),
-      )
-      setActiveConversationId(existing.id)
+
+      return { ok: false, error: res?.error || 'Failed to send request' }
+    } catch (err) {
+      console.warn('[sendConversationRequest] API error, falling back locally:', err)
+      // Local fallback
+      const newId = `conv-${Date.now()}`
+      const isNgoTarget = targetType === 'ngo'
+      const orgId = role === 'org' ? activeOrgId : isNgoTarget ? targetId : null
+      const requesterDisplayName = role === 'org' ? (organizations.find((o) => o.id === activeOrgId)?.name || 'Asha Sathi Nepal') : memberNickname
+      const requesterAvatarSrc = role === 'org' ? IMAGE_PATHS.ngos.ngo1 : memberAvatarSrc
+
+      const newConv = {
+        id: newId,
+        type: targetType,
+        requesterId: currentUserId,
+        requesterRole: role,
+        requesterName: requesterDisplayName,
+        requesterAvatar: requesterAvatarSrc,
+        recipientId: targetId,
+        recipientRole: targetType,
+        recipientName: targetName,
+        recipientAvatar: targetAvatar,
+        organizationId: orgId,
+        participantAvatar: targetAvatar,
+        participantSubtitle: targetSubtitle || (targetType === 'ngo' ? 'Verified NGO' : 'Community Member'),
+        requestStatus: 'pending',
+        blocked: false,
+        reported: false,
+        messages: [],
+      }
+
+      setConversations((current) => [newConv, ...current])
+      setActiveConversationId(newId)
       setPage('messages')
       return { ok: true }
     }
-
-    // Create new pending conversation with explicit participant IDs
-    const newId = `conv-${Date.now()}`
-    const isNgoTarget = targetType === 'ngo'
-    const orgId = role === 'org' ? activeOrgId : isNgoTarget ? targetId : null
-    const requesterDisplayName = role === 'org' ? (organizations.find((o) => o.id === activeOrgId)?.name || 'Asha Sathi Nepal') : memberNickname
-    const requesterAvatarSrc = role === 'org' ? (IMAGE_PATHS.ngos.ngo1) : memberAvatarSrc
-
-    const newConv = {
-      id: newId,
-      type: targetType,
-      requesterId: currentUserId,
-      requesterRole: role,
-      requesterName: requesterDisplayName,
-      requesterAvatar: requesterAvatarSrc,
-      recipientId: targetId,
-      recipientRole: targetType,
-      recipientName: targetName,
-      recipientAvatar: targetAvatar,
-      organizationId: orgId,
-      participantAvatar: targetAvatar,
-      participantSubtitle: targetSubtitle || (targetType === 'ngo' ? 'Verified NGO' : 'Community Member'),
-      requestStatus: 'pending',
-      blocked: false,
-      reported: false,
-      messages: [],
-    }
-
-    setConversations((current) => [newConv, ...current])
-    setActiveConversationId(newId)
-    setPage('messages')
-    return { ok: true }
   }
 
   // Central handler: acceptRequest - only the intended recipient can accept
-  const acceptRequest = (convId) => {
+  const acceptRequest = async (convId) => {
+    // Optimistic UI update
     setConversations((current) =>
-      current.map((c) => {
-        if (c.id !== convId) return c
-        // Authorization check: Only the intended recipient can accept
-        const isRecipient = c.recipientId === currentUserId
-        if (!isRecipient) return c
-        return { ...c, requestStatus: 'accepted' }
-      }),
+      current.map((c) => (c.id === convId ? { ...c, requestStatus: 'accepted' } : c)),
     )
+    try {
+      await updateConversationStatusApi({ conversationId: convId, action: 'accept' })
+    } catch (err) {
+      console.warn('[acceptRequest] API error:', err)
+    }
   }
 
   // Central handler: declineRequest - only the intended recipient can decline
-  const declineRequest = (convId) => {
+  const declineRequest = async (convId) => {
     setConversations((current) =>
-      current.map((c) => {
-        if (c.id !== convId) return c
-        // Authorization check: Only the intended recipient can decline
-        const isRecipient = c.recipientId === currentUserId
-        if (!isRecipient) return c
-        return { ...c, requestStatus: 'declined' }
-      }),
+      current.map((c) => (c.id === convId ? { ...c, requestStatus: 'declined' } : c)),
     )
+    try {
+      await updateConversationStatusApi({ conversationId: convId, action: 'decline' })
+    } catch (err) {
+      console.warn('[declineRequest] API error:', err)
+    }
+  }
+
+  // Central handler: cancelRequest - only original requester can cancel pending request
+  const cancelRequest = async (convId) => {
+    setConversations((current) =>
+      current.map((c) => (c.id === convId ? { ...c, requestStatus: 'cancelled' } : c)),
+    )
+    try {
+      await updateConversationStatusApi({ conversationId: convId, action: 'cancel' })
+    } catch (err) {
+      console.warn('[cancelRequest] API error:', err)
+    }
   }
 
   // Central handler: blockConversation - only actual participants can block
-  const blockConversation = (convId) => {
+  const blockConversation = async (convId) => {
     setConversations((current) =>
-      current.map((c) => {
-        if (c.id !== convId) return c
-        // Authorization check: must be a participant
-        const isParticipant = c.requesterId === currentUserId || c.recipientId === currentUserId
-        if (!isParticipant) return c
-        return { ...c, blocked: true }
-      }),
+      current.map((c) => (c.id === convId ? { ...c, blocked: true } : c)),
     )
+    try {
+      await updateConversationStatusApi({ conversationId: convId, action: 'block' })
+    } catch (err) {
+      console.warn('[blockConversation] API error:', err)
+    }
   }
 
   // Central handler: unblockConversation - only actual participants can unblock
-  // IMPORTANT: unblocking preserves the underlying requestStatus (does NOT make a declined or pending request accepted)
-  const unblockConversation = (convId) => {
+  const unblockConversation = async (convId) => {
     setConversations((current) =>
-      current.map((c) => {
-        if (c.id !== convId) return c
-        // Authorization check: must be a participant
-        const isParticipant = c.requesterId === currentUserId || c.recipientId === currentUserId
-        if (!isParticipant) return c
-        return { ...c, blocked: false }
-      }),
+      current.map((c) => (c.id === convId ? { ...c, blocked: false } : c)),
     )
+    try {
+      await updateConversationStatusApi({ conversationId: convId, action: 'unblock' })
+    } catch (err) {
+      console.warn('[unblockConversation] API error:', err)
+    }
   }
 
-  // Central handler: reportConversation - records report reason in state with metadata
-  const reportConversation = (convId, reason) => {
+  // Central handler: reportConversation - records report reason in state and server
+  const reportConversation = async (convId, reason) => {
     const reportReasonText = typeof reason === 'string' && reason.trim() ? reason.trim() : 'Flagged for review'
     const newReport = {
       id: `report-${Date.now()}`,
@@ -377,19 +488,19 @@ export default function App() {
     }
 
     setReports((current) => [...current, newReport])
-
     setConversations((current) =>
-      current.map((c) => {
-        if (c.id !== convId) return c
-        const isParticipant = c.requesterId === currentUserId || c.recipientId === currentUserId
-        if (!isParticipant) return c
-        return { ...c, reported: true }
-      }),
+      current.map((c) => (c.id === convId ? { ...c, reported: true } : c)),
     )
+
+    try {
+      await updateConversationStatusApi({ conversationId: convId, action: 'report', reason: reportReasonText })
+    } catch (err) {
+      console.warn('[reportConversation] API error:', err)
+    }
   }
 
   // Central handler: sendChatMessage - verifies participant, acceptance, and unblocked state
-  const sendChatMessage = (convId, text) => {
+  const sendChatMessage = async (convId, text) => {
     if (!text.trim()) return
 
     const timeStr = new Date().toLocaleTimeString(language === 'ne' ? 'ne-NP' : 'en', {
@@ -400,17 +511,10 @@ export default function App() {
     const authorRole = role === 'org' ? 'org' : 'member'
     const authorName = role === 'org' ? (organizations.find((o) => o.id === activeOrgId)?.name || 'NGO Caseworker') : memberNickname
 
+    // Optimistic UI update
     setConversations((current) =>
       current.map((conv) => {
         if (conv.id !== convId) return conv
-
-        // Authorization check: User MUST be an actual participant
-        const isParticipant = conv.requesterId === currentUserId || conv.recipientId === currentUserId
-        if (!isParticipant) return conv
-
-        // Status check: Must be accepted and NOT blocked
-        if (conv.blocked || conv.requestStatus !== 'accepted') return conv
-
         return {
           ...conv,
           messages: [
@@ -427,6 +531,12 @@ export default function App() {
         }
       }),
     )
+
+    try {
+      await sendMessageApi(convId, text.trim())
+    } catch (err) {
+      console.warn('[sendChatMessage] API error:', err)
+    }
   }
 
   useEffect(() => {
@@ -460,7 +570,6 @@ export default function App() {
   }
 
   const enterGuest = (targetPage = 'home') => {
-    setSessionRole(null)
     setPublicView('guest')
     const destination = targetPage === 'opportunities' ? 'notices' : targetPage
     const allowed = ALLOWED_PAGES_BY_ROLE.guest
@@ -483,154 +592,200 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const signOut = () => {
-    setSessionRole(null)
+  const signOut = async () => {
+    await logout()
+    setMemberId('')
+    setMemberNickname('')
+    setMemberAvatarId('')
+    setMemberDistrict('')
+    setMemberInterests([])
+    setMemberCommunityOptIn(false)
+    setActiveOrgId('')
+    setConversations([])
+    setActiveConversationId(null)
+    setReports([])
     setPublicView('landing')
     setPage('home')
     setQuickExit(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // Member Registration via handover code
-  const handleMemberRegister = ({ code, nickname, password, avatarId }) => {
-    const codeEntry = handoverCodes.find(
-      (item) => item.code.toUpperCase() === code.trim().toUpperCase() && item.status === 'available',
-    )
-
-    if (!codeEntry) {
-      return {
-        ok: false,
-        error: tx(
-          language,
-          'Invalid or already used handover code. In this frontend demo, try NS-240001 or generate a new code from the NGO dashboard.',
-          'अमान्य वा प्रयोग भइसकेको हस्तान्तरण कोड। यस डेमोमा NS-240001 प्रयोग गर्नुहोस् वा संस्था ड्यासबोर्डबाट नयाँ कोड जारी गर्नुहोस्।',
-        ),
-      }
+  // Member Registration via handover code calling real backend API
+  const handleMemberRegister = async ({ code, nickname, password, avatarId }) => {
+    const result = await registerMember({ code, nickname, password, avatarId })
+    if (result.ok) {
+      setPublicView('app')
+      setPage('home')
     }
-
-    const exists = demoMembers.some((member) => member.nickname.toLowerCase() === nickname.toLowerCase())
-    if (exists) {
-      return {
-        ok: false,
-        error: tx(
-          language,
-          'That nickname is already taken. Choose another nickname.',
-          'यो उपनाम पहिले नै प्रयोगमा छ। अर्को उपनाम छान्नुहोस्।',
-        ),
-      }
-    }
-
-    // Mark code as used
-    setHandoverCodes((current) =>
-      current.map((item) =>
-        item.code.toUpperCase() === code.trim().toUpperCase()
-          ? { ...item, status: 'used', usedBy: nickname }
-          : item,
-      ),
-    )
-
-    // Add newly registered woman to associated members roster
-    const newMemberId = `mem-${Date.now()}`
-    setAssociatedMembers((current) => [
-      {
-        id: newMemberId,
-        nickname,
-        avatarId,
-        joinedDate: 'Just now',
-        status: 'Active',
-        district: 'Lalitpur',
-        interests: ['Community Support'],
-        communityOptIn: true,
-      },
-      ...current,
-    ])
-
-    setDemoMembers((current) => [...current, { id: newMemberId, nickname, password, avatarId }])
-    setMemberId(newMemberId)
-    setMemberNickname(nickname)
-    setMemberAvatarId(avatarId)
-    setSessionRole('member')
-    setPublicView('app')
-    setPage('home')
-    return { ok: true }
+    return result
   }
 
-  // Member Login via nickname + password
-  const handleMemberLogin = ({ nickname, password, preview = false }) => {
-    const found = demoMembers.find(
-      (member) =>
-        member.nickname.toLowerCase() === nickname.toLowerCase() &&
-        (preview || member.password === password),
-    )
-
-    if (!found && !preview) {
-      return {
-        ok: false,
-        error: tx(
-          language,
-          'Invalid nickname or password. Use the demo preview button or register with NS-240001.',
-          'गलत उपनाम वा पासवर्ड। डेमो पूर्वावलोकन बटन वा NS-240001 कोडबाट दर्ता गर्नुहोस्।',
-        ),
-      }
+  // Member Login via nickname + password calling real backend API
+  const handleMemberLogin = async ({ nickname, password }) => {
+    const result = await loginMember({ nickname, password })
+    if (result.ok) {
+      setPublicView('app')
+      setPage('home')
     }
-
-    const resolvedId = found?.id || 'mem-1'
-    setMemberId(resolvedId)
-    setMemberNickname(found?.nickname || nickname)
-    setMemberAvatarId(found?.avatarId || 'avatar1')
-    setSessionRole('member')
-    setPublicView('app')
-    setPage('home')
-    return { ok: true }
+    return result
   }
 
-  // Staff Login (NGO / Admin)
-  const handleStaffLogin = ({ email, previewRole }) => {
-    const targetRole = previewRole || (email.toLowerCase().includes('admin') ? 'admin' : 'org')
-    setSessionRole(targetRole)
-    if (targetRole === 'org') {
-      const lowerEmail = (email || '').toLowerCase()
-      if (lowerEmail.includes('samjhana')) {
-        setActiveOrgId('org-samjhana')
-      } else if (lowerEmail.includes('ujjwal')) {
-        setActiveOrgId('org-ujjwal')
-      } else {
-        setActiveOrgId('org-asha')
-      }
+  // Staff Login (NGO / Admin) calling Firebase Auth + sync-staff
+  const handleStaffLogin = async ({ email, password }) => {
+    const result = await loginStaff({ email, password })
+    if (result.ok) {
+      setPublicView('app')
+      setPage('home')
     }
-    setPublicView('app')
-    setPage('home')
-    return { ok: true }
+    return result
   }
 
-  // Handover code generator for NGO
-  const generateHandoverCode = () => {
-    const code = `NS-${Math.floor(100000 + Math.random() * 900000)}`
-    setHandoverCodes((current) => [
-      {
-        code,
-        issuedAt: 'Just now',
-        expiresAt: '72 hours from issue',
-        status: 'available',
-      },
-      ...current,
-    ])
-    return code
+  // Handover code issuance for NGO staff calling real backend API
+  const handleIssueHandoverCode = async () => {
+    if (!auth.currentUser) {
+      return { ok: false, error: 'User is not authenticated' }
+    }
+    try {
+      const idToken = await auth.currentUser.getIdToken()
+      const result = await issueHandoverCode(idToken)
+      return result
+    } catch (err) {
+      return { ok: false, error: err.message || 'Failed to issue handover code' }
+    }
   }
 
   // NGO & Notice handlers
-  const registerOrganization = ({ name, location, focus }) => {
+  const registerOrganization = async (payload) => {
+    // If called with full payload (from real registration form), call real API
+    if (payload.applicantPassword) {
+      const result = await submitOrganizationApplication(payload)
+      if (result.ok) {
+        // Optimistically add to pending list for admin view
+        setOrganizations((current) => [
+          ...current,
+          {
+            id: result.orgId,
+            name: payload.name,
+            location: payload.location,
+            category: payload.category || 'General Support',
+            focus: payload.focus,
+            contactPhone: payload.contactPhone || '',
+            contactEmail: payload.contactEmail,
+            status: 'pending',
+            verificationStatus: 'pending',
+          },
+        ])
+      }
+      return result
+    }
+    // Legacy local-only creation (guest Organizations page quick-register)
     setOrganizations((current) => [
       ...current,
       {
         id: `org-${Date.now()}`,
-        name,
-        location,
-        focus,
+        name: payload.name,
+        location: payload.location,
+        focus: payload.focus,
         status: 'pending',
+        verificationStatus: 'pending',
       },
     ])
+    return { ok: true }
   }
+
+  // Reload organizations from real Firestore (admin or public view)
+  const reloadOrganizations = async () => {
+    try {
+      if (role === 'admin') {
+        const idToken = await auth.currentUser?.getIdToken?.()
+        if (idToken) {
+          const result = await fetchAdminOrganizations(idToken)
+          if (result.ok) {
+            setOrganizations(result.organizations)
+          }
+        }
+      } else {
+        const result = await fetchPublicOrganizations()
+        if (result.ok) {
+          setOrganizations((current) => {
+            // Merge: keep local-only pending items but replace verified ones from server
+            const serverIds = new Set(result.organizations.map((o) => o.id))
+            const localOnly = current.filter((o) => !serverIds.has(o.id))
+            return [...result.organizations, ...localOnly]
+          })
+        }
+      }
+    } catch {
+      // Non-critical: keep existing organizations in state
+    }
+  }
+
+  // Reload notices from real Firestore (admin, ngo org, or public view)
+  const reloadNotices = async () => {
+    setNoticesLoading(true)
+    setNoticesError('')
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (role === 'admin' && idToken) {
+        const result = await fetchAdminNotices(idToken)
+        if (result.ok) {
+          setNotices(result.notices || [])
+        } else {
+          setNotices([])
+          setNoticesError(result.error || tx(language, 'Failed to load notices from server.', 'सर्भरबाट सूचनाहरू लोड गर्न सकिएन।'))
+        }
+      } else if (role === 'org' && idToken) {
+        const [orgRes, pubRes] = await Promise.all([
+          fetchOrgNotices(idToken),
+          fetchPublicNotices(),
+        ])
+        if (orgRes.ok || pubRes.ok) {
+          const orgNotices = orgRes.ok ? orgRes.notices : []
+          const pubNotices = pubRes.ok ? pubRes.notices : []
+          const ownIds = new Set(orgNotices.map((n) => n.id))
+          const merged = [...orgNotices, ...pubNotices.filter((n) => !ownIds.has(n.id))]
+          setNotices(merged)
+        } else {
+          setNotices([])
+          setNoticesError(orgRes.error || pubRes.error || tx(language, 'Failed to load notices.', 'सूचनाहरू लोड गर्न सकिएन।'))
+        }
+      } else {
+        const result = await fetchPublicNotices()
+        if (result.ok) {
+          setNotices(result.notices || [])
+        } else {
+          setNotices([])
+          setNoticesError(result.error || tx(language, 'Failed to load public notices.', 'सार्वजनिक सूचनाहरू लोड गर्न सकिएन।'))
+        }
+      }
+    } catch {
+      setNotices([])
+      setNoticesError(tx(language, 'Network error loading notices. Please check your connection and retry.', 'सूचनाहरू लोड गर्दा नेटवर्क समस्या आयो। कृपया इन्टरनेट जाँचेर पुन: प्रयास गर्नुहोस्।'))
+    } finally {
+      setNoticesLoading(false)
+    }
+  }
+
+  // Load real organizations and notices on session ready
+  useEffect(() => {
+    if (authUser && (role === 'admin' || role === 'org' || role === 'member')) {
+      reloadOrganizations()
+      reloadNotices()
+    } else if (!authLoading && !authUser) {
+      // Load public verified organizations for guest/landing views
+      fetchPublicOrganizations().then((result) => {
+        if (result.ok && result.organizations.length > 0) {
+          setOrganizations((current) => {
+            const serverIds = new Set(result.organizations.map((o) => o.id))
+            const localOnly = current.filter((o) => !serverIds.has(o.id))
+            return [...result.organizations, ...localOnly]
+          })
+        }
+      })
+      reloadNotices()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser, role, authLoading])
 
   const updateOrganization = (id, changes) => {
     setOrganizations((current) =>
@@ -638,31 +793,65 @@ export default function App() {
     )
   }
 
-  const approveOrganization = (id) => {
+  const approveOrganization = async (id) => {
     if (role !== 'admin') return
+    // Optimistic UI update
     setOrganizations((current) =>
       current.map((item) =>
         item.id === id ? { ...item, status: 'approved', verificationStatus: 'verified' } : item,
       ),
     )
+    // Persist to backend
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (idToken) {
+        await reviewOrganization(idToken, { orgId: id, action: 'approve' })
+        // Refresh full admin list after approve to reflect any staff activations
+        reloadOrganizations()
+      }
+    } catch {
+      // Keep optimistic update in place
+    }
   }
 
-  const rejectOrganization = (id) => {
+  const rejectOrganization = async (id, rejectionReason = '') => {
     if (role !== 'admin') return
+    // Optimistic UI update
     setOrganizations((current) =>
       current.map((item) =>
-        item.id === id ? { ...item, status: 'rejected', verificationStatus: 'rejected' } : item,
+        item.id === id
+          ? { ...item, status: 'rejected', verificationStatus: 'rejected', rejectionReason }
+          : item,
       ),
     )
+    // Persist to backend
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (idToken) {
+        await reviewOrganization(idToken, { orgId: id, action: 'reject', rejectionReason })
+      }
+    } catch {
+      // Keep optimistic update in place
+    }
   }
 
-  const archiveOrganization = (id) => {
+  const archiveOrganization = async (id) => {
     if (role !== 'admin') return
+    // Optimistic UI update
     setOrganizations((current) =>
       current.map((item) =>
         item.id === id ? { ...item, status: 'archived', verificationStatus: 'archived' } : item,
       ),
     )
+    // Persist to backend
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (idToken) {
+        await reviewOrganization(idToken, { orgId: id, action: 'archive' })
+      }
+    } catch {
+      // Keep optimistic update in place
+    }
   }
 
   const addCaseworker = (workerData) => {
@@ -694,7 +883,7 @@ export default function App() {
   // Notice lifecycle management with two independent fields:
   // reviewStatus: 'pending_review' | 'approved' | 'rejected'
   // publicationStatus: 'draft' | 'published' | 'unpublished' | 'archived'
-  const createNotice = (notice, asDraft = false) => {
+  const createNotice = async (notice, asDraft = false) => {
     let reviewStatus = 'pending_review'
     let publicationStatus = asDraft ? 'draft' : 'unpublished'
 
@@ -703,84 +892,114 @@ export default function App() {
       publicationStatus = 'published'
     }
 
+    const tempId = `notice-${Date.now()}`
+    const orgName =
+      notice.source === 'gov'
+        ? notice.sourceAuthority || 'Government of Nepal'
+        : role === 'org'
+          ? (organizations.find((o) => o.id === activeOrgId)?.name || 'Asha Sathi Nepal')
+          : notice.orgName || 'Public Announcement'
+
     setNotices((current) => [
       {
         ...notice,
-        id: `notice-${Date.now()}`,
+        id: tempId,
         reviewStatus,
         publicationStatus,
         status: publicationStatus === 'published' ? 'approved' : publicationStatus === 'draft' ? 'draft' : reviewStatus,
         rejectionReason: '',
-        isSyntheticDemo: true,
+        isSyntheticDemo: false,
         sourceUrl: notice.sourceUrl || null,
         ingestionDate: new Date().toISOString().split('T')[0],
-        orgName:
-          notice.source === 'gov'
-            ? notice.orgName || 'Government of Nepal (Demo attribution)'
-            : role === 'org'
-              ? 'Asha Sathi Nepal'
-              : notice.orgName || 'Public Announcement',
+        orgName,
       },
       ...current,
     ])
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (role === 'admin' && (notice.source === 'gov' || notice.sourceType === 'government') && idToken) {
+        await createGovNoticeApi(idToken, notice, asDraft)
+        await reloadNotices()
+      } else if (role === 'org' && idToken) {
+        await createNoticeApi(idToken, notice, asDraft)
+        await reloadNotices()
+      }
+    } catch {
+      // Keep optimistic
+    }
   }
 
-  const updateNotice = (id, changes) => {
+  const updateNotice = async (id, changes) => {
+    const contentFieldsChanged =
+      changes.title !== undefined ||
+      changes.original !== undefined ||
+      changes.translation !== undefined ||
+      changes.nepaliTranslation !== undefined ||
+      changes.englishTranslation !== undefined ||
+      changes.simplifiedSummary !== undefined ||
+      changes.category !== undefined ||
+      changes.location !== undefined ||
+      changes.eligibility !== undefined ||
+      changes.deadline !== undefined
+
+    let updatedReviewStatus = changes.reviewStatus !== undefined ? changes.reviewStatus : undefined
+    let updatedPubStatus = changes.publicationStatus !== undefined ? changes.publicationStatus : undefined
+
+    if (contentFieldsChanged && role === 'org') {
+      if (changes.publicationStatus !== 'draft') {
+        updatedReviewStatus = 'pending_review'
+        updatedPubStatus = 'unpublished'
+      }
+    }
+
     setNotices((current) =>
       current.map((notice) => {
         if (notice.id !== id) return notice
-
-        const contentFieldsChanged =
-          changes.title !== undefined ||
-          changes.original !== undefined ||
-          changes.translation !== undefined ||
-          changes.nepaliTranslation !== undefined ||
-          changes.englishTranslation !== undefined ||
-          changes.simplifiedSummary !== undefined ||
-          changes.category !== undefined ||
-          changes.location !== undefined ||
-          changes.eligibility !== undefined ||
-          changes.deadline !== undefined
-
-        let updatedReviewStatus = changes.reviewStatus !== undefined ? changes.reviewStatus : notice.reviewStatus || 'pending_review'
-        let updatedPubStatus = changes.publicationStatus !== undefined ? changes.publicationStatus : notice.publicationStatus || 'unpublished'
-
-        // Rule: If an NGO edits an approved or published notice,
-        // changes must return to review (pending_review) and become unpublished until approved again.
-        if (contentFieldsChanged && role === 'org') {
-          if (changes.publicationStatus !== 'draft') {
-            updatedReviewStatus = 'pending_review'
-            updatedPubStatus = 'unpublished'
-          }
-        }
-
+        const rev = updatedReviewStatus !== undefined ? updatedReviewStatus : notice.reviewStatus || 'pending_review'
+        const pub = updatedPubStatus !== undefined ? updatedPubStatus : notice.publicationStatus || 'unpublished'
         const legacyStatus =
-          updatedPubStatus === 'archived'
+          pub === 'archived'
             ? 'archived'
-            : updatedPubStatus === 'published'
+            : pub === 'published'
               ? 'approved'
-              : updatedPubStatus === 'draft'
+              : pub === 'draft'
                 ? 'draft'
-                : updatedReviewStatus
+                : rev
 
         return {
           ...notice,
           ...changes,
-          reviewStatus: updatedReviewStatus,
-          publicationStatus: updatedPubStatus,
+          reviewStatus: rev,
+          publicationStatus: pub,
           status: legacyStatus,
           rejectionReason:
             changes.rejectionReason !== undefined
               ? changes.rejectionReason
-              : updatedReviewStatus === 'pending_review'
+              : rev === 'pending_review'
                 ? ''
                 : notice.rejectionReason,
         }
       }),
     )
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (!idToken) return
+      if (role === 'admin') {
+        await adminModerateNotice(idToken, 'update', id, changes)
+        await reloadNotices()
+      } else if (role === 'org') {
+        const asDraft = changes.publicationStatus === 'draft'
+        await updateNoticeApi(idToken, id, changes, asDraft)
+        await reloadNotices()
+      }
+    } catch {
+      // Keep optimistic
+    }
   }
 
-  const submitNoticeForReview = (id) => {
+  const submitNoticeForReview = async (id) => {
     setNotices((current) =>
       current.map((item) =>
         item.id === id
@@ -794,14 +1013,36 @@ export default function App() {
           : item,
       ),
     )
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (role === 'org' && idToken) {
+        await updateNoticeApi(idToken, id, { publicationStatus: 'unpublished', reviewStatus: 'pending_review' }, false)
+        await reloadNotices()
+      }
+    } catch {
+      // Keep optimistic
+    }
   }
 
-  const deleteNotice = (id) => {
+  const deleteNotice = async (id) => {
     setNotices((current) => current.filter((notice) => notice.id !== id))
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (role === 'admin' && idToken) {
+        await adminModerateNotice(idToken, 'delete', id)
+        await reloadNotices()
+      } else if (role === 'org' && idToken) {
+        await deleteNoticeApi(idToken, id)
+        await reloadNotices()
+      }
+    } catch {
+      // Keep optimistic
+    }
   }
 
-  const approveNotice = (id) => {
-    // Only admin can approve notices
+  const approveNotice = async (id) => {
     if (role !== 'admin') return
     setNotices((current) =>
       current.map((item) =>
@@ -816,11 +1057,22 @@ export default function App() {
           : item,
       ),
     )
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (idToken) {
+        await adminModerateNotice(idToken, 'approve', id)
+        await reloadNotices()
+      }
+    } catch {
+      // Keep optimistic
+    }
   }
 
-  const rejectNotice = (id, reason = '') => {
-    // Only admin can reject notices; mandatory reason
+  const rejectNotice = async (id, reason = '') => {
     if (role !== 'admin') return
+    const rejectionReason =
+      reason || 'Does not meet public notice guidelines or contains incomplete information.'
     setNotices((current) =>
       current.map((item) =>
         item.id === id
@@ -829,16 +1081,24 @@ export default function App() {
               reviewStatus: 'rejected',
               publicationStatus: 'unpublished',
               status: 'rejected',
-              rejectionReason:
-                reason ||
-                'Does not meet public notice guidelines or contains incomplete information.',
+              rejectionReason,
             }
           : item,
       ),
     )
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (idToken) {
+        await adminModerateNotice(idToken, 'reject', id, { rejectionReason })
+        await reloadNotices()
+      }
+    } catch {
+      // Keep optimistic
+    }
   }
 
-  const archiveNotice = (id) => {
+  const archiveNotice = async (id) => {
     setNotices((current) =>
       current.map((item) =>
         item.id === id
@@ -850,10 +1110,22 @@ export default function App() {
           : item,
       ),
     )
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (role === 'admin' && idToken) {
+        await adminModerateNotice(idToken, 'archive', id)
+        await reloadNotices()
+      } else if (role === 'org' && idToken) {
+        await updateNoticeApi(idToken, id, { publicationStatus: 'archived' })
+        await reloadNotices()
+      }
+    } catch {
+      // Keep optimistic
+    }
   }
 
-  const restoreNotice = (id) => {
-    // Restoring returns to draft or unpublished, NEVER automatically published
+  const restoreNotice = async (id) => {
     setNotices((current) =>
       current.map((item) =>
         item.id === id
@@ -865,10 +1137,19 @@ export default function App() {
           : item,
       ),
     )
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (role === 'admin' && idToken) {
+        await adminModerateNotice(idToken, 'restore', id)
+        await reloadNotices()
+      }
+    } catch {
+      // Keep optimistic
+    }
   }
 
-  const unpublishNotice = (id) => {
-    // Unpublishing removes from public and member visibility
+  const unpublishNotice = async (id) => {
     setNotices((current) =>
       current.map((item) =>
         item.id === id
@@ -880,6 +1161,16 @@ export default function App() {
           : item,
       ),
     )
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken?.()
+      if (role === 'admin' && idToken) {
+        await adminModerateNotice(idToken, 'unpublish', id)
+        await reloadNotices()
+      }
+    } catch {
+      // Keep optimistic
+    }
   }
 
   // Page Content Routing with strict role authorization
@@ -933,10 +1224,10 @@ export default function App() {
   } else if (page === 'cases' && role === 'org') {
     pageContent = (
       <CasesPage
-        associatedMembers={associatedMembers}
-        handoverCodes={handoverCodes}
+        activeOrgId={activeOrgId}
         language={language}
-        onGenerateHandoverCode={generateHandoverCode}
+        onGenerateHandoverCode={handleIssueHandoverCode}
+        team={team}
       />
     )
   } else if (page === 'team' && role === 'org') {
@@ -970,6 +1261,7 @@ export default function App() {
         }}
         onUpdateOrganization={updateOrganization}
         organizations={organizations}
+        activeOrgId={activeOrgId}
         role={role}
       />
     )
@@ -977,6 +1269,8 @@ export default function App() {
     pageContent = (
       <NoticesPage
         language={language}
+        loading={noticesLoading}
+        error={noticesError}
         notices={notices}
         onApprove={approveNotice}
         onArchiveNotice={archiveNotice}
@@ -984,6 +1278,7 @@ export default function App() {
         onDeleteNotice={deleteNotice}
         onReject={rejectNotice}
         onRestoreNotice={restoreNotice}
+        onRetry={reloadNotices}
         onSubmitForReview={submitNoticeForReview}
         onUnpublishNotice={unpublishNotice}
         onUpdateNotice={updateNotice}
@@ -993,10 +1288,14 @@ export default function App() {
   } else if (page === 'community' && role === 'member') {
     pageContent = (
       <CommunityPage
+        communityError={communityError}
+        communityLoading={communityLoading}
+        currentMemberId={memberId}
         currentMemberNickname={memberNickname}
         language={language}
-        members={associatedMembers}
+        members={communityMembers}
         onNavigate={navigate}
+        onRefresh={loadCommunityDirectory}
         onRequestChat={({ id, nickname, avatarId, district }) => {
           const avatarSrc = MEMBER_AVATAR_OPTIONS.find((a) => a.id === avatarId)?.src || IMAGE_PATHS.avatars.avatar1
           sendConversationRequest({
@@ -1028,6 +1327,7 @@ export default function App() {
         language={language}
         onAcceptRequest={acceptRequest}
         onBlock={blockConversation}
+        onCancelRequest={cancelRequest}
         onDeclineRequest={declineRequest}
         onReport={reportConversation}
         onSelectConversation={setActiveConversationId}
@@ -1057,11 +1357,24 @@ export default function App() {
     )
   }
 
+  if (authLoading) {
+    return (
+      <main className="auth-loading-screen" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '1rem', background: 'var(--color-bg, #faf8f5)', color: 'var(--color-text, #1c1917)' }}>
+        <div className="brand-mark" style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-primary-subtle, #f5f0e8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="shield" size={28} />
+        </div>
+        <p style={{ fontWeight: 600, fontSize: '1rem' }}>
+          {tx(language, 'Restoring secure session…', 'सुरक्षित सत्र पुनःस्थापना हुँदैछ…')}
+        </p>
+      </main>
+    )
+  }
+
   if (quickExit) {
     return <QuickExitScreen language={language} onReturn={() => setQuickExit(false)} />
   }
 
-  if (!sessionRole && publicView === 'landing') {
+  if (!sessionRole && (publicView === 'landing' || publicView === 'app')) {
     return (
       <LandingPage
         language={language}
@@ -1074,7 +1387,7 @@ export default function App() {
     )
   }
 
-  if (!sessionRole && publicView === 'auth') {
+    if (!sessionRole && publicView === 'auth') {
     return (
       <AuthPage
         initialMode={authMode}

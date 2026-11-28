@@ -111,42 +111,215 @@ function EditOrganizationModal({ open, onClose, organization, onUpdate, language
 function RegisterOrganizationModal({ open, onClose, onRegister, language }) {
   const [name, setName] = useState('')
   const [location, setLocation] = useState('Kathmandu')
+  const [category, setCategory] = useState('Skills & Reintegration')
   const [focus, setFocus] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [applicantName, setApplicantName] = useState('')
+  const [applicantPassword, setApplicantPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
   const close = () => {
     setName('')
     setFocus('')
+    setContactPhone('')
+    setContactEmail('')
+    setApplicantName('')
+    setApplicantPassword('')
+    setError('')
+    setSuccess('')
     onClose()
   }
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault()
-    if (!name.trim() || !focus.trim()) return
-    onRegister({ name: name.trim(), location, focus: focus.trim() })
-    close()
+    setError('')
+    if (!name.trim() || !focus.trim()) {
+      setError(tx(language, 'Name and service description are required.', 'नाम र सेवा विवरण आवश्यक छ।'))
+      return
+    }
+    if (!contactEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
+      setError(tx(language, 'A valid contact email is required.', 'मान्य सम्पर्क इमेल आवश्यक छ।'))
+      return
+    }
+    if (applicantPassword.length < 8) {
+      setError(tx(language, 'Administrator password must be at least 8 characters.', 'प्रशासक पासवर्ड कम्तीमा ८ अक्षरको हुनुपर्छ।'))
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const result = await onRegister?.({
+        name: name.trim(),
+        location,
+        category,
+        focus: focus.trim(),
+        contactPhone: contactPhone.trim(),
+        contactEmail: contactEmail.trim(),
+        applicantName: applicantName.trim() || `${name.trim()} Admin`,
+        applicantPassword,
+      })
+
+      if (result && !result.ok) {
+        setError(result.error || tx(language, 'Failed to submit application.', 'आवेदन दर्ता गर्न सकिएन।'))
+      } else {
+        setSuccess(
+          tx(
+            language,
+            'Organization application submitted successfully! It is now pending Platform Admin verification.',
+            'संस्था दर्ता आवेदन सफलतापूर्वक पेश गरियो! यो अब प्रशासकको समीक्षाको प्रतीक्षामा छ।',
+          ),
+        )
+        setTimeout(() => {
+          close()
+        }, 1800)
+      }
+    } catch (err) {
+      setError(err.message || tx(language, 'Failed to submit application.', 'आवेदन दर्ता गर्न सकिएन।'))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <Modal
-      description={tx(language, 'Only public organization details are collected in this demo.', 'यो डेमोमा संस्थाको सार्वजनिक विवरण मात्र राखिन्छ।')}
+      description={tx(
+        language,
+        'Register your non-governmental organization to collaborate on community support and provide verified notices.',
+        'सामुदायिक सहयोग र प्रमाणित सूचना प्रदान गर्न आफ्नो संस्था दर्ता गर्नुहोस्।',
+      )}
       onClose={close}
       open={open}
+      size="large"
       title={tx(language, 'Register an organization', 'संस्था दर्ता गर्नुहोस्')}
     >
       <form className="form-stack" onSubmit={submit}>
-        <Field label={tx(language, 'Organization name', 'संस्थाको नाम')}>
-          <input className="input-control" onChange={(event) => setName(event.target.value)} required value={name} />
-        </Field>
-        <Field label={tx(language, 'Service location', 'सेवा स्थान')}>
-          <select className="input-control" onChange={(event) => setLocation(event.target.value)} value={location}>
-            <option>Kathmandu</option><option>Lalitpur</option><option>Pokhara</option><option>Other</option>
-          </select>
-        </Field>
+        {error && (
+          <div className="notice-inline notice-inline-warning">
+            <Icon name="error" />
+            <span>{error}</span>
+          </div>
+        )}
+        {success && (
+          <div className="notice-inline notice-inline-success">
+            <Icon name="check_circle" />
+            <span>{success}</span>
+          </div>
+        )}
+
+        <div className="form-row">
+          <Field label={tx(language, 'Organization name', 'संस्थाको नाम')}>
+            <input
+              className="input-control"
+              disabled={submitting}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="e.g. Sahara Foundation Nepal"
+              required
+              value={name}
+            />
+          </Field>
+          <Field label={tx(language, 'Service location', 'सेवा स्थान')}>
+            <select
+              className="input-control"
+              disabled={submitting}
+              onChange={(event) => setLocation(event.target.value)}
+              value={location}
+            >
+              <option>Kathmandu</option>
+              <option>Lalitpur</option>
+              <option>Bhaktapur</option>
+              <option>Pokhara</option>
+              <option>Chitwan</option>
+              <option>Other</option>
+            </select>
+          </Field>
+        </div>
+
+        <div className="form-row">
+          <Field label={tx(language, 'Primary support area', 'मुख्य सहयोग क्षेत्र')}>
+            <input
+              className="input-control"
+              disabled={submitting}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="e.g. Skills & Reintegration, Legal Aid"
+              value={category}
+            />
+          </Field>
+          <Field label={tx(language, 'Contact phone', 'सम्पर्क फोन')}>
+            <input
+              className="input-control"
+              disabled={submitting}
+              onChange={(e) => setContactPhone(e.target.value)}
+              placeholder="+977-..."
+              value={contactPhone}
+            />
+          </Field>
+        </div>
+
         <Field label={tx(language, 'Public service description', 'सार्वजनिक सेवा विवरण')}>
-          <textarea className="input-control textarea-control" onChange={(event) => setFocus(event.target.value)} required rows={3} value={focus} />
+          <textarea
+            className="input-control textarea-control"
+            disabled={submitting}
+            onChange={(event) => setFocus(event.target.value)}
+            placeholder="Describe public services, transition assistance, or community support provided..."
+            required
+            rows={3}
+            value={focus}
+          />
         </Field>
-        <div className="notice-inline notice-inline-warning"><Icon name="info" /><span>{tx(language, 'No Member or case information. Registration remains pending until Platform Admin review.', 'सदस्य वा केसको जानकारी होइन। प्रशासकको समीक्षासम्म दर्ता विचाराधीन रहन्छ।')}</span></div>
-        <div className="modal-actions"><Button onClick={close} variant="secondary">{tx(language, 'Cancel', 'रद्द गर्नुहोस्')}</Button><Button icon="send" type="submit">{tx(language, 'Submit for review', 'समीक्षाका लागि पठाउनुहोस्')}</Button></div>
+
+        <div className="form-row">
+          <Field label={tx(language, 'Organization Admin Email', 'संस्था प्रशासक इमेल')}>
+            <input
+              className="input-control"
+              disabled={submitting}
+              onChange={(e) => setContactEmail(e.target.value)}
+              placeholder="admin@organization.org.np"
+              required
+              type="email"
+              value={contactEmail}
+            />
+          </Field>
+          <Field label={tx(language, 'Representative Name', 'प्रतिनिधिको नाम')}>
+            <input
+              className="input-control"
+              disabled={submitting}
+              onChange={(e) => setApplicantName(e.target.value)}
+              placeholder="Full name"
+              value={applicantName}
+            />
+          </Field>
+        </div>
+
+        <Field label={tx(language, 'Admin Login Password (min 8 chars)', 'प्रशासक पासवर्ड (कम्तीमा ८ अक्षर)')}>
+          <input
+            className="input-control"
+            disabled={submitting}
+            onChange={(e) => setApplicantPassword(e.target.value)}
+            placeholder="Choose secure password"
+            required
+            type="password"
+            value={applicantPassword}
+          />
+        </Field>
+
+        <div className="notice-inline notice-inline-info">
+          <Icon name="shield" />
+          <span>{tx(language, 'No member or case data is collected. Applications remain pending until Platform Admin review.', 'सदस्य वा केसको जानकारी संकलन गरिँदैन। प्रशासकको समीक्षासम्म दर्ता विचाराधीन रहन्छ।')}</span>
+        </div>
+
+        <div className="modal-actions">
+          <Button disabled={submitting} onClick={close} variant="secondary">
+            {tx(language, 'Cancel', 'रद्द गर्नुहोस्')}
+          </Button>
+          <Button disabled={submitting} icon="send" type="submit">
+            {submitting
+              ? tx(language, 'Submitting...', 'पठाउँदै...')
+              : tx(language, 'Submit for review', 'समीक्षाका लागि पठाउनुहोस्')}
+          </Button>
+        </div>
       </form>
     </Modal>
   )
@@ -259,6 +432,7 @@ export default function OrganizationsPage({
   onRequestConversation,
   onNavigate,
   onOpenAuth,
+  activeOrgId = '',
   language,
 }) {
   const [showRegistration, setShowRegistration] = useState(false)
@@ -273,14 +447,20 @@ export default function OrganizationsPage({
   const isPublic = role === 'member' || role === 'guest'
 
   // The active NGO for Org Admin
-  const myOrg = organizations.find((org) => org.id === 'org-asha') || organizations[0]
+  const myOrg = (activeOrgId ? organizations.find((org) => org.id === activeOrgId) : null) || organizations[0]
 
   // Filter locations and categories dynamically
   const locations = ['All', ...new Set(organizations.map((o) => o.location).filter(Boolean))]
   const categories = ['All', 'Skills & Reintegration', 'Employment & Peer Support', 'Wellbeing & Referrals']
 
+  // F-4 Remediation: Use verificationStatus === 'verified' as the sole canonical
+  // public visibility condition. The legacy status === 'approved' fallback is removed
+  // because archived organizations can have status === 'archived' but a stale
+  // status === 'approved' field, which could cause them to appear in the public list.
   const filteredOrganizations = (isPublic
-    ? organizations.filter((organization) => organization.status === 'approved')
+    ? organizations.filter(
+        (organization) => organization.verificationStatus === 'verified',
+      )
     : organizations
   ).filter((org) => {
     if (locationFilter !== 'All' && org.location !== locationFilter) return false

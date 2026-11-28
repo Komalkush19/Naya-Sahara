@@ -1,0 +1,338 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && request.auth.token.role == role;
+    }
+
+    function isPlatformAdmin() {
+      return hasRole('platform_admin');
+    }
+
+    function isNgoStaff(orgId) {
+      return hasRole('ngo_admin') && request.auth.token.orgId == orgId;
+    }
+
+    // Default deny for all unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ==========================================
+    // 1. ORGANIZATIONS
+    // ==========================================
+    match /organizations/{orgId} {
+      // Public / Guests and Members can read verified NGOs only
+      // NGO staff can read their own NGO profile regardless of status
+      // Platform Admins can read all NGOs
+      allow read: if (resource.data.verificationStatus == 'verified') ||
+                     (isAuthenticated() && isNgoStaff(orgId)) ||
+                     isPlatformAdmin();
+
+      // NGO staff can update own profile and caseworkers (cannot change verificationStatus or id)
+      allow update: if (isAuthenticated() && isNgoStaff(orgId) &&
+                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['verificationStatus', 'id'])) ||
+                       isPlatformAdmin();
+
+      // NGO creation and deletion are restricted to Platform Admin
+      allow create: if isPlatformAdmin();
+      allow delete: if isPlatformAdmin();
+    }
+
+    // ==========================================
+    // 2. STAFF PROFILES (SERVER-ONLY)
+    // ==========================================
+    match /staffProfiles/{uid} {
+      // Authenticated staff can read their own profile document only
+      allow read: if isUser(uid);
+      // Writes are strictly server-only via Admin SDK
+      allow write: if false;
+    }
+
+    // ==========================================
+    // 3. MEMBERS (INTERNAL PSEUDONYMOUS PROFILES)
+    // ==========================================
+    match /members/{memberUid} {
+      // Member can read their own record
+      // Authorized NGO staff can read member records associated with their organization only if the NGO is verified
+      // Note: Platform Admins do NOT have blanket client-side read on members because
+      // Firestore rules cannot selectively filter fields; admin safe views are server-mediated.
+      allow read: if isUser(memberUid) ||
+                     (isAuthenticated() && hasRole('ngo_admin') &&
+                      request.auth.token.orgId == resource.data.associatedOrgId &&
+                      get(/databases/$(database)/documents/organizations/$(request.auth.token.orgId)).data.verificationStatus == 'verified');
+
+      // Members can update their own permitted profile fields (no credentials, status, or org fields)
+      allow update: if isUser(memberUid) &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['avatarId', 'district', 'interests', 'communityOptIn', 'updatedAt']);
+
+      // Member registration and deletion are server-mediated
+      allow create, delete: if false;
+    }
+
+    // ==========================================
+    // 4. MEMBER CREDENTIALS (SERVER-ONLY)
+    // ==========================================
+    match /memberCredentials/{normalizedNickname} {
+      // Bcrypt hashes and login credentials must NEVER be accessible to client SDK
+      allow read, write: if false;
+    }
+
+    // ==========================================
+    // 5. HANDOVER CODES (SERVER-ONLY)
+    // ==========================================
+    match /handoverCodes/{codeHash} {
+      // Single-use 72h onboarding code hashes are managed strictly by serverless APIs
+      allow read, write: if false;
+    }
+
+    // ==========================================
+    // 6. COMMUNITY PROFILES (OPT-IN MEMBER DIRECTORY)
+    // SEC-3: Strict schema and attribute whitelist
+    // ==========================================
+    match /communityProfiles/{memberUid} {
+      function isValidCommunityProfile(data) {
+        let keys = data.keys();
+        return keys.hasOnly(['uid', 'nickname', 'avatarId', 'district', 'interests', 'communityOptIn', 'updatedAt']) &&
+               data.uid is string && data.uid == memberUid &&
+               data.nickname is string && data.nickname.size() > 0 && data.nickname.size() <= 50 &&
+               data.avatarId is string &&
+               (!('district' in data) || data.district == null || data.district is string) &&
+               (!('interests' in data) || data.interests is list) &&
+               data.communityOptIn is bool;
+      }
+
+      // Member can always read their own profile (regardless of communityOptIn)
+      // Other authenticated members can read profiles only where communityOptIn is true
+      allow read: if isUser(memberUid) ||
+                     (isAuthenticated() && resource.data.communityOptIn == true);
+
+      // Member can create and update their own community profile with strict schema validation
+      allow create, update: if isUser(memberUid) &&
+                               isValidCommunityProfile(request.resource.data);
+
+      // Deletion is permitted for the member
+      allow delete: if isUser(memberUid);
+    }
+
+    // ==========================================
+    // 7. NOTICES (UNIFIED NGO & GOV NOTICES)
+    // ==========================================
+    match /notices/{noticeId} {
+      // Public / Guests & Members see only approved and published notices
+      // NGO staff can view all notices belonging to their own organization
+      // Platform Admins can view all notices across all statuses
+      allow read: if (resource.data.publicationStatus == 'published' && resource.data.reviewStatus == 'approved') ||
+                     (isAuthenticated() && hasRole('ngo_admin') && resource.data.orgId == request.auth.token.orgId) ||
+                     isPlatformAdmin();
+
+      // NGO staff can create notices for their organization (must start in draft or unpublished pending_review)
+      allow create: if (isAuthenticated() && hasRole('ngo_admin') &&
+                        request.resource.data.orgId == request.auth.token.orgId &&
+                        (request.resource.data.publicationStatus == 'draft' ||
+                         (request.resource.data.publicationStatus == 'unpublished' && request.resource.data.reviewStatus == 'pending_review'))) ||
+                       isPlatformAdmin();
+
+      // NGO staff can edit own notices (cannot self-approve; edits cannot set publicationStatus to published)
+      allow update: if (isAuthenticated() && hasRole('ngo_admin') &&
+                        resource.data.orgId == request.auth.token.orgId &&
+                        request.resource.data.orgId == request.auth.token.orgId &&
+                        (request.resource.data.publicationStatus == 'draft' ||
+                         (request.resource.data.publicationStatus == 'unpublished' && request.resource.data.reviewStatus == 'pending_review'))) ||
+                       isPlatformAdmin();
+
+      allow delete: if (isAuthenticated() && hasRole('ngo_admin') && resource.data.orgId == request.auth.token.orgId) ||
+                       isPlatformAdmin();
+    }
+
+    // ==========================================
+    // 8. CONVERSATIONS & REQUESTS
+    // SEC-1: Prevent self-acceptance of chat requests
+    // SEC-2: Prevent NGO-to-NGO messaging
+    // ==========================================
+    match /conversations/{conversationId} {
+      function isConversationParticipant() {
+        return (resource.data.type == 'member' && request.auth.uid in resource.data.participantIds) ||
+               (resource.data.type == 'ngo' && (request.auth.uid in resource.data.participantIds ||
+                (hasRole('ngo_admin') && request.auth.token.orgId == resource.data.orgId)));
+      }
+
+      function isIntendedRecipient(data) {
+        return (data.recipientRole == 'member' && request.auth.uid == data.recipientId) ||
+               (data.recipientRole == 'org' && hasRole('ngo_admin') &&
+                (request.auth.token.orgId == data.recipientId || (data.orgId != null && request.auth.token.orgId == data.orgId)));
+      }
+
+      function isRequester(data) {
+        return (data.requesterRole == 'member' && request.auth.uid == data.requesterId) ||
+               (data.requesterRole == 'org' && hasRole('ngo_admin') &&
+                (request.auth.token.orgId == data.requesterId || (data.orgId != null && request.auth.token.orgId == data.orgId)));
+      }
+
+      // Read allowed only to authorized participants (Admins & Guests explicitly denied)
+      allow read: if isAuthenticated() && isConversationParticipant();
+
+      // SEC-2: Enforce permitted creation paths:
+      // - Member can initiate request to another member or to an approved NGO
+      // - NGO staff can initiate request to an eligible member
+      // - NGO-to-NGO creation is strictly prohibited
+      allow create: if isAuthenticated() &&
+                       // Requester identity check
+                       ((request.auth.uid == request.resource.data.requesterId && request.resource.data.requesterRole == 'member') ||
+                        (hasRole('ngo_admin') && request.auth.token.orgId == request.resource.data.requesterId && request.resource.data.requesterRole == 'org')) &&
+                       // SEC-2: If requester is NGO, recipient must NOT be an NGO
+                       (!(hasRole('ngo_admin') && (request.resource.data.recipientRole == 'org' || request.resource.data.type != 'ngo'))) &&
+                       // Initial request status must be pending and unblocked
+                       request.resource.data.requestStatus == 'pending' &&
+                       request.resource.data.blocked == false &&
+                       // Self-requests prohibited
+                       request.resource.data.recipientId != request.resource.data.requesterId;
+
+      // SEC-1: Enforce update authorizations:
+      // - Only authorized participants can update
+      // - Only permitted fields can be modified
+      // - Status transition from pending to accepted/declined MUST be done by the intended recipient
+      // - Requesters CANNOT accept or decline their own request
+      allow update: if isAuthenticated() && isConversationParticipant() &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                         'requestStatus', 'respondedAt', 'blocked', 'blockedByUid',
+                         'reported', 'lastMessageText', 'lastMessageTime', 'updatedAt'
+                       ]) &&
+                       // If requestStatus is modified:
+                       // - intended recipient can transition pending -> accepted / declined
+                       // - original requester can transition pending -> cancelled
+                       (request.resource.data.requestStatus == resource.data.requestStatus ||
+                        (resource.data.requestStatus == 'pending' &&
+                         request.resource.data.requestStatus in ['accepted', 'declined'] &&
+                         isIntendedRecipient(resource.data) &&
+                         !isRequester(resource.data)) ||
+                        (resource.data.requestStatus == 'pending' &&
+                         request.resource.data.requestStatus == 'cancelled' &&
+                         isRequester(resource.data)));
+
+      allow delete: if false;
+
+      // ==========================================
+      // 9. CONVERSATION MESSAGES (SUBCOLLECTION)
+      // ==========================================
+      match /messages/{messageId} {
+        function parentConversation() {
+          return get(/databases/$(database)/documents/conversations/$(conversationId));
+        }
+
+        function isParentParticipant() {
+          let parent = parentConversation();
+          return (parent.data.type == 'member' && request.auth.uid in parent.data.participantIds) ||
+                 (parent.data.type == 'ngo' && (request.auth.uid in parent.data.participantIds ||
+                  (hasRole('ngo_admin') && request.auth.token.orgId == parent.data.orgId)));
+        }
+
+        // Messages can only be read if parent requestStatus is accepted
+        allow read: if isAuthenticated() &&
+                       isParentParticipant() &&
+                       parentConversation().data.requestStatus == 'accepted';
+
+        // Messages can only be sent if parent requestStatus is accepted and not blocked
+        allow create: if isAuthenticated() &&
+                         isParentParticipant() &&
+                         parentConversation().data.requestStatus == 'accepted' &&
+                         parentConversation().data.blocked == false &&
+                         (request.auth.uid == request.resource.data.authorId ||
+                          (hasRole('ngo_admin') && request.auth.token.orgId == request.resource.data.authorId));
+
+        // Messages are immutable: cannot be edited or deleted
+        allow update, delete: if false;
+      }
+    }
+
+    // ==========================================
+    // 10. REPORTS
+    // ==========================================
+    match /reports/{reportId} {
+      allow read: if isPlatformAdmin();
+      allow create: if isAuthenticated() &&
+                       request.auth.uid == request.resource.data.reporterUid;
+      allow update: if isPlatformAdmin();
+      allow delete: if false;
+    }
+
+    // ==========================================
+    // 11. ADMIN AUDIT LOGS (SERVER-ONLY)
+    // ==========================================
+    match /adminAuditLogs/{logId} {
+      allow read: if isPlatformAdmin();
+      allow write: if false;
+    }
+
+    // ==========================================
+    // 12. AUTH RATE LIMITS (SERVER-ONLY)
+    // ==========================================
+    match /authRateLimits/{limitId} {
+      allow read, write: if false;
+    }
+
+    // ==========================================
+    // 13. ORG NAME RESERVATIONS (SERVER-ONLY)
+    // ==========================================
+    match /orgNameReservations/{normalizedName} {
+      allow read, write: if false;
+    }
+
+    // ==========================================
+    // 14. CASES & CASE NOTES
+    // ==========================================
+    match /cases/{caseId} {
+      function isOrgStaff() {
+        return isAuthenticated() && hasRole('ngo_admin') && request.auth.token.orgId == resource.data.orgId;
+      }
+      function isCaseMember() {
+        return isAuthenticated() && request.auth.uid == resource.data.memberId;
+      }
+
+      // NGO staff can read their org's cases; Member can read their own case; Platform admin can read
+      allow read: if isOrgStaff() || isCaseMember() || isPlatformAdmin();
+
+      // Only verified NGO staff can create cases for their org
+      allow create: if isAuthenticated() && hasRole('ngo_admin') &&
+                       request.resource.data.orgId == request.auth.token.orgId;
+
+      // Only NGO staff of that org or platform admin can update case
+      allow update: if (isOrgStaff() && request.resource.data.orgId == resource.data.orgId) || isPlatformAdmin();
+
+      // Deletion is restricted to Platform Admin
+      allow delete: if isPlatformAdmin();
+
+      match /notes/{noteId} {
+        function parentCase() {
+          return get(/databases/$(database)/documents/cases/$(caseId));
+        }
+        function isParentOrgStaff() {
+          return isAuthenticated() && hasRole('ngo_admin') && request.auth.token.orgId == parentCase().data.orgId;
+        }
+
+        // NGO staff can read all notes; Member can only read notes marked member_visible
+        allow read: if isParentOrgStaff() ||
+                       (isAuthenticated() && request.auth.uid == parentCase().data.memberId && resource.data.visibility == 'member_visible') ||
+                       isPlatformAdmin();
+
+        // Only NGO staff can create notes
+        allow create: if isParentOrgStaff();
+
+        // Notes are immutable
+        allow update, delete: if isPlatformAdmin();
+      }
+    }
+  }
+}

@@ -87,10 +87,14 @@ function MemberCommunityModal({ open, onClose, member, onRequestChat, isSelf, la
 
 export default function CommunityPage({
   members = [],
-  currentMemberNickname = 'Sajilo',
-  optedIn = true,
+  currentMemberNickname = '',
+  currentMemberId = '',
+  optedIn = false,
   onUpdateOptIn,
   onRequestChat,
+  onRefresh,
+  communityLoading = false,
+  communityError = '',
   language,
 }) {
   const [query, setQuery] = useState('')
@@ -98,8 +102,9 @@ export default function CommunityPage({
   const [selectedMember, setSelectedMember] = useState(null)
   const [feedbackNotice, setFeedbackNotice] = useState('')
 
-  // Privacy Rule: Only members who have explicitly opted into the community directory appear!
-  const optedInMembers = members.filter((m) => m.communityOptIn !== false)
+  // communityProfiles collection already filters to communityOptIn===true server-side;
+  // members prop here are opt-in members only. No need to filter again.
+  const optedInMembers = members
 
   const districts = ['All', ...new Set(optedInMembers.map((m) => m.district).filter(Boolean))]
 
@@ -114,7 +119,7 @@ export default function CommunityPage({
   })
 
   const handleSendRequest = (member) => {
-    if (member.nickname === currentMemberNickname) {
+    if (member.nickname === currentMemberNickname || member.id === currentMemberId) {
       setFeedbackNotice(tx(language, 'You cannot send a message request to yourself.', 'आफैलाई सन्देश अनुरोध पठाउन मिल्दैन।'))
       return
     }
@@ -183,96 +188,122 @@ export default function CommunityPage({
           )}
 
           {/* Directory Search & District Filters */}
-          <div className="list-toolbar">
-            <div className="search-field">
-              <Icon name="search" />
-              <input
-                aria-label={tx(language, 'Search community directory', 'समुदाय निर्देशिका खोज्नुहोस्')}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={tx(language, 'Search by nickname, district, or skills…', 'उपनाम, जिल्ला वा सीप खोज्नुहोस्…')}
-                value={query}
-              />
-            </div>
-
-            <div className="filter-select-group">
-              <select
-                aria-label={tx(language, 'Filter by district', 'जिल्ला अनुसार छान्नुहोस्')}
-                className="input-control"
-                onChange={(e) => setDistrictFilter(e.target.value)}
-                style={{ width: 'auto', padding: '6px 12px', fontSize: '13px' }}
-                value={districtFilter}
-              >
-                {districts.map((d) => (
-                  <option key={d} value={d}>
-                    {d === 'All' ? tx(language, 'All Districts', 'सबै जिल्लाहरू') : d}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Directory Cards Grid */}
-          <div className="directory-cards-grid">
-            {filteredMembers.map((member) => {
-              const avatarSrc =
-                MEMBER_AVATAR_OPTIONS.find((a) => a.id === member.avatarId)?.src || IMAGE_PATHS.avatars.avatar1
-              const isSelf = member.nickname === currentMemberNickname
-
-              return (
-                <Card className="directory-member-card" key={member.id}>
-                  <div className="directory-card-top">
-                    <span className="avatar">
-                      <AssetImage alt="" className="avatar-img" fallbackSrc={IMAGE_PLACEHOLDERS.avatar} src={avatarSrc} />
-                    </span>
-                    <div className="directory-member-headings">
-                      <strong>
-                        {member.nickname} {isSelf && <small style={{ color: 'var(--plum)' }}>({tx(language, 'You', 'तपाईं')})</small>}
-                      </strong>
-                      {member.district && (
-                        <span><Icon name="location_on" size={15} />{member.district}</span>
-                      )}
-                    </div>
-                    <Badge dot tone="lavender">{tx(language, 'Opted In', 'समावेश')}</Badge>
-                  </div>
-
-                  {member.interests && member.interests.length > 0 && (
-                    <div className="directory-interests-row">
-                      {member.interests.map((skill) => (
-                        <span className="skill-tag" key={skill}>{skill}</span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="directory-card-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <Button
-                      icon="info"
-                      onClick={() => setSelectedMember(member)}
-                      size="small"
-                      variant="secondary"
-                    >
-                      {tx(language, 'View profile', 'प्रोफाइल हेर्नुहोस्')}
-                    </Button>
-                    {!isSelf && (
-                      <Button
-                        icon="mail"
-                        onClick={() => handleSendRequest(member)}
-                        size="small"
-                        variant="secondary"
-                      >
-                        {tx(language, 'Message request', 'सन्देश अनुरोध')}
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
-
-          {!filteredMembers.length && (
-            <Card className="empty-state">
-              <Icon name="search_off" size={28} />
-              <strong>{tx(language, 'No community members match your search or filter.', 'खोजिएका कुनै सदस्य फेला परेनन्।')}</strong>
+          {communityLoading && (
+            <Card className="empty-state" style={{ padding: '32px', textAlign: 'center' }}>
+              <Icon name="hourglass_top" size={28} />
+              <strong>{tx(language, 'Loading community directory…', 'समुदाय निर्देशिका लोड हुँदैछ…')}</strong>
             </Card>
+          )}
+
+          {!communityLoading && communityError && (
+            <Card className="empty-state" style={{ padding: '24px' }}>
+              <Icon name="error_outline" size={28} />
+              <strong>{tx(language, 'Could not load the directory.', 'निर्देशिका लोड हुन सकेन।')}</strong>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>{communityError}</p>
+              <Button icon="refresh" onClick={() => onRefresh?.()} size="small" variant="secondary">
+                {tx(language, 'Retry', 'पुनः प्रयास गर्नुहोस्')}
+              </Button>
+            </Card>
+          )}
+
+          {!communityLoading && !communityError && (
+            <>
+              <div className="list-toolbar">
+                <div className="search-field">
+                  <Icon name="search" />
+                  <input
+                    aria-label={tx(language, 'Search community directory', 'समुदाय निर्देशिका खोज्नुहोस्')}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={tx(language, 'Search by nickname, district, or skills…', 'उपनाम, जिल्ला वा सीप खोज्नुहोस्…')}
+                    value={query}
+                  />
+                </div>
+
+                <div className="filter-select-group">
+                  <select
+                    aria-label={tx(language, 'Filter by district', 'जिल्ला अनुसार छान्नुहोस्')}
+                    className="input-control"
+                    onChange={(e) => setDistrictFilter(e.target.value)}
+                    style={{ width: 'auto', padding: '6px 12px', fontSize: '13px' }}
+                    value={districtFilter}
+                  >
+                    {districts.map((d) => (
+                      <option key={d} value={d}>
+                        {d === 'All' ? tx(language, 'All Districts', 'सबै जिल्लाहरू') : d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Directory Cards Grid */}
+              <div className="directory-cards-grid">
+                {filteredMembers.map((member) => {
+                  const avatarSrc =
+                    MEMBER_AVATAR_OPTIONS.find((a) => a.id === member.avatarId)?.src || IMAGE_PATHS.avatars.avatar1
+                  const isSelf = member.id === currentMemberId || member.nickname === currentMemberNickname
+
+                  return (
+                    <Card className="directory-member-card" key={member.id}>
+                      <div className="directory-card-top">
+                        <span className="avatar">
+                          <AssetImage alt="" className="avatar-img" fallbackSrc={IMAGE_PLACEHOLDERS.avatar} src={avatarSrc} />
+                        </span>
+                        <div className="directory-member-headings">
+                          <strong>
+                            {member.nickname} {isSelf && <small style={{ color: 'var(--plum)' }}>({tx(language, 'You', 'तपाईं')})</small>}
+                          </strong>
+                          {member.district && (
+                            <span><Icon name="location_on" size={15} />{member.district}</span>
+                          )}
+                        </div>
+                        <Badge dot tone="lavender">{tx(language, 'Opted In', 'समावेश')}</Badge>
+                      </div>
+
+                      {member.interests && member.interests.length > 0 && (
+                        <div className="directory-interests-row">
+                          {member.interests.map((skill) => (
+                            <span className="skill-tag" key={skill}>{skill}</span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="directory-card-actions" style={{ display: 'flex', gap: '8px' }}>
+                        <Button
+                          icon="info"
+                          onClick={() => setSelectedMember(member)}
+                          size="small"
+                          variant="secondary"
+                        >
+                          {tx(language, 'View profile', 'प्रोफाइल हेर्नुहोस्')}
+                        </Button>
+                        {!isSelf && (
+                          <Button
+                            icon="mail"
+                            onClick={() => handleSendRequest(member)}
+                            size="small"
+                            variant="secondary"
+                          >
+                            {tx(language, 'Message request', 'सन्देश अनुरोध')}
+                          </Button>
+                        )}
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+
+              {!filteredMembers.length && (
+                <Card className="empty-state">
+                  <Icon name="search_off" size={28} />
+                  <strong>
+                    {members.length === 0
+                      ? tx(language, 'No members have opted into the community directory yet.', 'अहिलेसम्म कुनै सदस्यले समुदाय निर्देशिकामा सामेल हुन रोजेका छैनन्।')
+                      : tx(language, 'No community members match your search or filter.', 'खोजिएका कुनै सदस्य फेला परेनन्।')}
+                  </strong>
+                </Card>
+              )}
+            </>
           )}
         </div>
 

@@ -322,6 +322,62 @@ function AdminNoticeRejectModal({ open, onClose, onConfirm, notice, language }) 
   )
 }
 
+function AdminOrgRejectModal({ open, onClose, onConfirm, organization, language }) {
+  const [reason, setReason] = useState('')
+
+  if (!open || !organization) return null
+
+  const submit = (e) => {
+    e.preventDefault()
+    if (!reason.trim()) return
+    onConfirm(organization.id, reason.trim())
+    setReason('')
+    onClose()
+  }
+
+  return (
+    <Modal
+      description={tx(
+        language,
+        'Provide a mandatory reason explaining why this organization application cannot be approved.',
+        'यो संस्थाको आवेदन किन स्वीकृत गर्न सकिँदैन भन्ने अनिवार्य कारण उल्लेख गर्नुहोस्।',
+      )}
+      onClose={() => {
+        setReason('')
+        onClose()
+      }}
+      open={open}
+      title={tx(language, 'Reject Organization (Mandatory Reason)', 'संस्था अस्वीकार (अनिवार्य कारण)')}
+    >
+      <form className="form-stack" onSubmit={submit}>
+        <Field label={tx(language, 'Organization name', 'संस्थाको नाम')}>
+          <input className="input-control" disabled value={organization.name} />
+        </Field>
+        <Field label={tx(language, 'Reason for rejection', 'अस्वीकारको कारण')}>
+          <textarea
+            className="input-control textarea-control"
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={tx(
+              language,
+              'e.g. Unverifiable registration documentation, invalid contact information, or duplicate application.',
+              'जस्तै: दर्ता प्रमाण अपुग, सम्पर्क विवरण अमान्य वा दोहोरिएको आवेदन।',
+            )}
+            required
+            rows={3}
+            value={reason}
+          />
+        </Field>
+        <div className="modal-actions">
+          <Button onClick={onClose} variant="secondary">{tx(language, 'Cancel', 'रद्द गर्नुहोस्')}</Button>
+          <Button disabled={!reason.trim()} icon="close" type="submit" variant="danger">
+            {tx(language, 'Confirm rejection', 'अस्वीकार पुष्टि गर्नुहोस्')}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 function PlatformAdminHome({
   organizations = [],
   notices = [],
@@ -340,6 +396,7 @@ function PlatformAdminHome({
   const [adminTab, setAdminTab] = useState('moderation') // 'moderation' | 'ngos' | 'members'
   const [moderationType, setModerationType] = useState('ngo') // 'ngo' | 'gov'
   const [rejectingNotice, setRejectingNotice] = useState(null)
+  const [rejectingOrg, setRejectingOrg] = useState(null)
 
   // Platform Metrics
   const totalNgos = organizations.length
@@ -603,12 +660,21 @@ function PlatformAdminHome({
                       <Badge dot tone="green">{tx(language, 'Verified', 'प्रमाणित')}</Badge>
                     ) : isArchived ? (
                       <Badge tone="neutral">{tx(language, 'Archived', 'अभिलेख')}</Badge>
+                    ) : org.status === 'rejected' || org.verificationStatus === 'rejected' ? (
+                      <Badge tone="peach">{tx(language, 'Rejected', 'अस्वीकार')}</Badge>
                     ) : (
                       <Badge dot tone="peach">{tx(language, 'Pending Verification', 'प्रमाणीकरण बाँकी')}</Badge>
                     )}
                   </div>
 
                   <p>{org.focus}</p>
+
+                  {org.rejectionReason && (
+                    <div className="notice-inline notice-inline-warning" style={{ margin: '6px 0' }}>
+                      <Icon name="error" />
+                      <span><strong>{tx(language, 'Rejection Reason:', 'अस्वीकारको कारण:')}</strong> {org.rejectionReason}</span>
+                    </div>
+                  )}
 
                   <div className="member-data-grid" style={{ margin: '8px 0' }}>
                     <div>
@@ -617,11 +683,11 @@ function PlatformAdminHome({
                     </div>
                     <div>
                       <span>{tx(language, 'Caseworkers', 'केसकर्मी')}</span>
-                      <strong>{org.caseworkerCount || 2}</strong>
+                      <strong>{org.caseworkerCount || 1}</strong>
                     </div>
                     <div>
-                      <span>{tx(language, 'Associated Women', 'सम्बद्ध महिला')}</span>
-                      <strong>{org.associatedCount || 3} (Demo)</strong>
+                      <span>{tx(language, 'Contact', 'सम्पर्क')}</span>
+                      <strong>{org.contactEmail || org.contactPhone || 'N/A'}</strong>
                     </div>
                   </div>
 
@@ -637,7 +703,7 @@ function PlatformAdminHome({
                         </Button>
                         <Button
                           icon="cancel"
-                          onClick={() => onRejectOrg?.(org.id)}
+                          onClick={() => setRejectingOrg(org)}
                           size="small"
                           variant="danger"
                         >
@@ -770,6 +836,20 @@ function PlatformAdminHome({
           open={Boolean(rejectingNotice)}
         />
       )}
+
+      {/* Reject Organization Modal */}
+      {rejectingOrg && (
+        <AdminOrgRejectModal
+          language={language}
+          onClose={() => setRejectingOrg(null)}
+          onConfirm={(id, reason) => {
+            onRejectOrg?.(id, reason)
+            setRejectingOrg(null)
+          }}
+          open={Boolean(rejectingOrg)}
+          organization={rejectingOrg}
+        />
+      )}
     </>
   )
 }
@@ -778,7 +858,7 @@ function MemberHome({
   language,
   onNavigate,
   claimCode,
-  nickname = 'Sajilo',
+  nickname = '',
   memberProfile,
   onUpdateMemberProfile,
   notices = [],
@@ -787,15 +867,15 @@ function MemberHome({
   const [showProfileModal, setShowProfileModal] = useState(false)
 
   const profile = memberProfile || {
-    nickname,
-    avatarId: 'avatar1',
-    district: 'Lalitpur',
-    interests: ['Tailoring', 'Handicrafts'],
-    communityOptIn: true,
+    nickname: nickname || '',
+    avatarId: '',
+    district: '',
+    interests: [],
+    communityOptIn: false,
     showDistrict: true,
     showInterests: true,
-    verifyingNgo: 'Asha Sathi Nepal',
-    joinedDate: 'Nov 2026',
+    verifyingNgo: '',
+    joinedDate: '',
   }
 
   const avatarSrc =

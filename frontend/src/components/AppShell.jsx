@@ -66,7 +66,7 @@ export default function AppShell({
   page,
   language,
   isOnline = true,
-  memberNickname = 'Sajilo',
+  memberNickname = '',
   memberAvatarSrc = IMAGE_PATHS.avatars.avatar1,
   onNavigate,
   onLanguageChange,
