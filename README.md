@@ -2,8 +2,6 @@
 
 ### A privacy-first digital platform connecting NGOs, support opportunities, and women transitioning through and after incarceration in Nepal.
 
-> **Current implementation status:** The UI under `frontend/` is currently running with local synthetic demo data in React state while Firebase Auth, Firestore rules, and Vercel API endpoints are being integrated. `backend/firestore.rules` currently defaults to deny-all until reviewed and deployed. Do not enter real personal, legal, or medical data.
-
 Naya Sahara helps bridge fragmented rehabilitation, training, legal-aid, and employment support in Nepal. It enables verified NGOs to publish public support notices and connect with women, while allowing women to use pseudonymous nickname-and-avatar identities, read translated and simplified government and NGO notices, and communicate safely without exposing their real names, email addresses, or phone numbers.
 
 > **Disclaimer:** Naya Sahara is an information, opportunity-discovery, and safe-communication platform—not a legal or court-records system. It provides general support information, not legal advice.
